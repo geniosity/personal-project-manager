@@ -1,0 +1,41 @@
+{
+  "name": "personal-project-manager",
+  "displayName": "Personal Project Manager",
+  "description": "Personal Project Manager is a VS Code extension that provides a dedicated tree view interface for organizing and managing logical \"projects\". Unlike file/folder management extensions, this extension enables users to create custom project definitions that aggregate files and folders from anywhere on their filesystem into a single coherent view. Projects are scoped to a root directory but can include manually linked external files and folders, creating a flexible organizational system that transcends filesystem boundaries.",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.109.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "personal-project-manager.helloWorld",
+        "title": "Hello World"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.109.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "@typescript-eslint/eslint-plugin": "^8.28.0",
+    "@typescript-eslint/parser": "^8.28.0",
+    "eslint": "^9.23.0",
+    "typescript": "^5.8.2",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1"
+  }
+}
