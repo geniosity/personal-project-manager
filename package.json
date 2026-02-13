@@ -9,15 +9,146 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onView:projectViewer"
+  ],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "explorer": [
+        {
+          "id": "projectViewerContainer",
+          "title": "Personal Project Manager",
+          "icon": "$(folder-opened)"
+        }
+      ]
+    },
+    "views": {
+      "projectViewerContainer": [
+        {
+          "id": "projectViewer",
+          "name": "Projects"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "projectViewer",
+        "contents": "No projects yet.\n[Create New Project](command:projectviewer.createNewProject)\n[Open Project](command:projectviewer.openProject)"
+      }
+    ],
     "commands": [
       {
-        "command": "personal-project-manager.helloWorld",
-        "title": "Hello World"
+        "command": "projectviewer.createNewProject",
+        "title": "Create New Project",
+        "category": "Projects",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "projectviewer.openProject",
+        "title": "Open Project",
+        "category": "Projects",
+        "icon": "$(folder-open)"
+      },
+      {
+        "command": "projectviewer.closeProject",
+        "title": "Close Project",
+        "category": "Projects"
+      },
+      {
+        "command": "projectviewer.refreshEntry",
+        "title": "Refresh",
+        "category": "Projects",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "projectviewer.renameItem",
+        "title": "Rename",
+        "category": "Projects"
+      },
+      {
+        "command": "projectviewer.deleteItem",
+        "title": "Delete",
+        "category": "Projects"
+      },
+      {
+        "command": "projectviewer.addExternalLink",
+        "title": "Add External Link",
+        "category": "Projects",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "projectviewer.removeLink",
+        "title": "Remove",
+        "category": "Projects"
+      },
+      {
+        "command": "projectviewer.copyPath",
+        "title": "Copy Path",
+        "category": "Projects"
+      },
+      {
+        "command": "projectviewer.copyRelativePath",
+        "title": "Copy Relative Path",
+        "category": "Projects"
+      },
+      {
+        "command": "projectviewer.openContainingFolder",
+        "title": "Open Containing Folder",
+        "category": "Projects"
       }
-    ]
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "projectviewer.createNewProject",
+          "when": "view == projectViewer",
+          "group": "navigation"
+        },
+        {
+          "command": "projectviewer.refreshEntry",
+          "when": "view == projectViewer",
+          "group": "navigation"
+        },
+        {
+          "command": "projectviewer.addExternalLink",
+          "when": "view == projectViewer",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "projectviewer.renameItem",
+          "when": "view == projectViewer && viewItem =~ /^(physicalDir|physicalFile)$/",
+          "group": "1_modification"
+        },
+        {
+          "command": "projectviewer.deleteItem",
+          "when": "view == projectViewer && viewItem =~ /^(physicalDir|physicalFile)$/",
+          "group": "1_modification"
+        },
+        {
+          "command": "projectviewer.removeLink",
+          "when": "view == projectViewer && viewItem =~ /^(manualDir|manualFile|brokenLink)$/",
+          "group": "1_modification"
+        },
+        {
+          "command": "projectviewer.copyPath",
+          "when": "view == projectViewer && viewItem =~ /^(physicalDir|physicalFile|manualDir|manualFile)$/",
+          "group": "2_copy"
+        },
+        {
+          "command": "projectviewer.copyRelativePath",
+          "when": "view == projectViewer && viewItem =~ /^(physicalDir|physicalFile)$/",
+          "group": "2_copy"
+        },
+        {
+          "command": "projectviewer.openContainingFolder",
+          "when": "view == projectViewer && viewItem =~ /^(physicalDir|physicalFile|manualDir|manualFile)$/",
+          "group": "2_copy"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
