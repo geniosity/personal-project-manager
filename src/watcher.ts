@@ -37,7 +37,6 @@ export class FileWatcher {
       this.watcher.onDidChange(() => this.debounceRefresh());
       this.watcher.onDidDelete(() => this.debounceRefresh());
 
-      console.log(`[FileWatcher] Started watching: ${this.projectPath}`);
     } catch (error) {
       console.error(`[FileWatcher] Failed to start watching: ${error}`);
     }
@@ -57,7 +56,6 @@ export class FileWatcher {
       this.watcher = undefined;
     }
 
-    console.log(`[FileWatcher] Stopped watching: ${this.projectPath}`);
   }
 
   /**

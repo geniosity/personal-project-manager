@@ -5,7 +5,7 @@ import { LinksStorage, ILink } from './linksStorage';
 /**
  * Base class for all tree node models.
  */
-abstract class NodeModel {
+export abstract class NodeModel {
   /** Unique identifier for this node */
   abstract readonly id: string;
   /** Display label for this node */
@@ -93,7 +93,11 @@ class ManualDirModel extends NodeModel {
   readonly collapsible = true;
   readonly itemPath: string;
 
-  constructor(public readonly link: ILink) {
+  constructor(
+    public readonly link: ILink,
+    private projectRootPath: string,
+    private linksStorage: LinksStorage
+  ) {
     super();
     this.itemPath = link.path;
     this.label = link.name;
@@ -118,6 +122,18 @@ class ManualDirModel extends NodeModel {
       });
     } catch (error) {
       console.error(`Error reading link directory ${this.link.path}:`, error);
+    }
+
+    try {
+      const links = this.linksStorage.getLinks(this.projectRootPath);
+      const childLinks = Object.values(links).filter(
+        link => link.parentId === this.link.id
+      );
+      childLinks.forEach(link => {
+        children.push(createLinkNode(link, this.projectRootPath, this.linksStorage));
+      });
+    } catch (error) {
+      console.error(`Error reading child links for ${this.link.id}:`, error);
     }
     return sortNodes(children);
   }
@@ -219,13 +235,7 @@ class ProjectModel extends NodeModel {
       const linkArray = Object.values(links).filter(l => !l.parentId);
 
       linkArray.forEach(link => {
-        if (link.isBroken) {
-          children.push(new BrokenLinkModel(link));
-        } else if (fs.statSync(link.path).isDirectory()) {
-          children.push(new ManualDirModel(link));
-        } else {
-          children.push(new ManualFileModel(link));
-        }
+        children.push(createLinkNode(link, this.projectPath, this.linksStorage));
       });
     } catch (error) {
       console.error(`Error reading links for project ${this.projectName}:`, error);
@@ -273,6 +283,22 @@ function sortNodes(nodes: NodeModel[]): NodeModel[] {
     // Within same category, sort alphabetically by label
     return a.label.localeCompare(b.label);
   });
+}
+
+function createLinkNode(
+  link: ILink,
+  projectRootPath: string,
+  linksStorage: LinksStorage
+): NodeModel {
+  if (link.isBroken) {
+    return new BrokenLinkModel(link);
+  }
+
+  if (fs.statSync(link.path).isDirectory()) {
+    return new ManualDirModel(link, projectRootPath, linksStorage);
+  }
+
+  return new ManualFileModel(link);
 }
 
 /**

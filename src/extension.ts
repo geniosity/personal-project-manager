@@ -1,8 +1,9 @@
-﻿import * as vscode from 'vscode';
+﻿import * as path from 'path';
+import * as vscode from 'vscode';
 import { ProjectsStorage, IProject } from './storage';
 import { LinksStorage } from './linksStorage';
 import { StateManager } from './stateManager';
-import { TreeModel } from './treeModel';
+import { TreeModel, NodeModel } from './treeModel';
 import { FileWatcher } from './watcher';
 import { TreeDragDropController } from './dragDropController';
 
@@ -21,7 +22,10 @@ class ProjectNode extends vscode.TreeItem {
     public readonly label: string,
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
     public readonly contextValue: string,
-    command?: vscode.Command
+    public readonly id: string,
+    public readonly itemPath: string,
+    command?: vscode.Command,
+    public readonly linkId?: string
   ) {
     super(label, collapsibleState);
     this.contextValue = contextValue;
@@ -29,6 +33,60 @@ class ProjectNode extends vscode.TreeItem {
       this.command = command;
     }
   }
+}
+
+function extractLinkId(node: NodeModel): string | undefined {
+  if (node.id.startsWith('manualDir:')) {
+    return node.id.slice('manualDir:'.length);
+  }
+  if (node.id.startsWith('manualFile:')) {
+    return node.id.slice('manualFile:'.length);
+  }
+  if (node.id.startsWith('brokenLink:')) {
+    return node.id.slice('brokenLink:'.length);
+  }
+  return undefined;
+}
+
+function convertNodeToTreeItem(node: NodeModel): ProjectNode {
+  const isFile = node.contextValue === 'physicalFile' || node.contextValue === 'manualFile';
+  const isFolder = node.contextValue === 'physicalDir' || node.contextValue === 'manualDir';
+  const isBroken = node.contextValue === 'brokenLink';
+  const collapsibleState = node.collapsible
+    ? vscode.TreeItemCollapsibleState.Collapsed
+    : vscode.TreeItemCollapsibleState.None;
+
+  const command = isFile && !isBroken
+    ? {
+        command: 'vscode.open',
+        title: 'Open File',
+        arguments: [vscode.Uri.file(node.itemPath), { preview: false }]
+      }
+    : undefined;
+
+  const treeItem = new ProjectNode(
+    node.label,
+    collapsibleState,
+    node.contextValue,
+    node.id,
+    node.itemPath,
+    command,
+    extractLinkId(node)
+  );
+
+  if ((isFile || isFolder) && !isBroken) {
+    treeItem.resourceUri = vscode.Uri.file(node.itemPath);
+  }
+
+  if (node.contextValue === 'manualFile' || node.contextValue === 'manualDir') {
+    treeItem.description = '(external)';
+  }
+
+  if (isBroken) {
+    treeItem.iconPath = new vscode.ThemeIcon('warning');
+  }
+
+  return treeItem;
 }
 
 /**
@@ -73,20 +131,85 @@ class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode> {
     if (!element) {
       // Return root level - all projects
       const projects = this.projectsStorage.getProjects();
+      const activeProjectName = this.stateManager.getActiveProjectName();
       return Promise.resolve(
         projects.map(
-          project =>
-            new ProjectNode(
+          project => {
+            const node = new ProjectNode(
               project.name,
-              vscode.TreeItemCollapsibleState.Collapsed,
-              'project'
-            )
+              project.name === activeProjectName
+                ? vscode.TreeItemCollapsibleState.Collapsed
+                : vscode.TreeItemCollapsibleState.None,
+              'project',
+              `project:${project.name}`,
+              project.rootPath
+            );
+            node.resourceUri = vscode.Uri.file(project.rootPath);
+            return node;
+          }
         )
       );
     }
 
-    // Get children for a specific project
-    return Promise.resolve([]);
+    if (element.contextValue === 'project') {
+      const activeProjectName = this.stateManager.getActiveProjectName();
+      if (element.label !== activeProjectName) {
+        return Promise.resolve([]);
+      }
+
+      const project = this.projectsStorage.getProject(element.label);
+      if (!project) {
+        return Promise.resolve([]);
+      }
+
+      const projectModel = this.treeModel.createProjectModel(
+        project.name,
+        project.rootPath
+      );
+
+      return Promise.resolve(
+        this.treeModel.getChildren(projectModel).map(convertNodeToTreeItem)
+      );
+    }
+
+    const activeProject = this.getActiveProject();
+    if (!activeProject) {
+      return Promise.resolve([]);
+    }
+
+    const projectModel = this.treeModel.createProjectModel(
+      activeProject.name,
+      activeProject.rootPath
+    );
+    const targetNode = this.findNodeById(projectModel, element.id);
+    if (!targetNode) {
+      return Promise.resolve([]);
+    }
+
+    return Promise.resolve(targetNode.getChildren().map(convertNodeToTreeItem));
+  }
+
+  private getActiveProject(): IProject | undefined {
+    const activeProjectName = this.stateManager.getActiveProjectName();
+    if (!activeProjectName) {
+      return undefined;
+    }
+    return this.projectsStorage.getProject(activeProjectName);
+  }
+
+  private findNodeById(node: NodeModel, id: string): NodeModel | undefined {
+    if (node.id === id) {
+      return node;
+    }
+
+    for (const child of node.getChildren()) {
+      const found = this.findNodeById(child, id);
+      if (found) {
+        return found;
+      }
+    }
+
+    return undefined;
   }
 }
 
@@ -95,8 +218,6 @@ class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode> {
  * @param context The extension context
  */
 export function activate(context: vscode.ExtensionContext) {
-  console.log('Personal Project Manager extension is now active!');
-
   // Initialize storage services
   const projectsStorage = new ProjectsStorage(context.globalStoragePath);
   const linksStorage = new LinksStorage();
@@ -106,21 +227,126 @@ export function activate(context: vscode.ExtensionContext) {
   // Track active watcher
   let activeWatcher: FileWatcher | undefined;
 
+  const activateProject = (project: IProject) => {
+    stateManager.setActiveProjectName(project.name);
+
+    if (activeWatcher) {
+      activeWatcher.dispose();
+    }
+
+    activeWatcher = new FileWatcher(project.rootPath, () => {
+      treeProvider.refresh();
+    });
+    activeWatcher.start();
+    treeProvider.refresh();
+  };
+
+  const getProjectByName = (projectName: string): IProject | undefined =>
+    projectsStorage.getProject(projectName);
+
+  const pathExists = async (fsPath: string): Promise<boolean> => {
+    try {
+      await vscode.workspace.fs.stat(vscode.Uri.file(fsPath));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const getTargetDirectory = (node?: ProjectNode): string | undefined => {
+    if (!node) {
+      return undefined;
+    }
+
+    if (node.contextValue === 'project') {
+      return node.itemPath;
+    }
+
+    if (node.contextValue === 'physicalDir' || node.contextValue === 'manualDir') {
+      return node.itemPath;
+    }
+
+    return undefined;
+  };
+
+  const countEntries = async (uri: vscode.Uri): Promise<number> => {
+    const entries = await vscode.workspace.fs.readDirectory(uri);
+    let count = entries.length;
+    for (const [name, type] of entries) {
+      if (type === vscode.FileType.Directory) {
+        count += await countEntries(vscode.Uri.joinPath(uri, name));
+      }
+    }
+    return count;
+  };
+
   // Create and register the tree provider
   const treeProvider = new ProjectTreeProvider(projectsStorage, linksStorage, stateManager, treeModel);
   const treeView = vscode.window.createTreeView('projectViewer', {
     treeDataProvider: treeProvider,
-    dragAndDropController: new TreeDragDropController(async (draggedId, targetId) => {
-      console.log(`Drag-drop: ${draggedId} -> ${targetId}`);
-      vscode.window.showInformationMessage(`Drag and drop: ${draggedId} to ${targetId}`);
-    })
+    dragAndDropController: new TreeDragDropController(
+      projectsStorage,
+      linksStorage,
+      stateManager,
+      () => treeProvider.refresh()
+    )
   });
 
   // Register all commands with placeholder handlers
   const commands = [
     {
       id: 'projectviewer.createNewProject',
-      handler: () => vscode.window.showInformationMessage('Create New Project')
+      handler: async () => {
+        const selection = await vscode.window.showOpenDialog({
+          canSelectFiles: false,
+          canSelectFolders: true,
+          canSelectMany: false,
+          openLabel: 'Select Project Root'
+        });
+
+        if (!selection || selection.length === 0) {
+          return;
+        }
+
+        const rootPath = selection[0].fsPath;
+        const existingProjects = projectsStorage.getProjects();
+        const defaultName = path.basename(rootPath);
+
+        const projectName = await vscode.window.showInputBox({
+          prompt: 'Enter project name',
+          value: defaultName,
+          validateInput: (value) => {
+            const trimmed = value.trim();
+            if (!trimmed) {
+              return 'Project name cannot be empty';
+            }
+            if (/[\\/]/.test(trimmed)) {
+              return 'Project name cannot contain path separators';
+            }
+            if (existingProjects.some(project => project.name === trimmed)) {
+              return `Project name "${trimmed}" already exists`;
+            }
+            return undefined;
+          }
+        });
+
+        if (!projectName) {
+          return;
+        }
+
+        try {
+          projectsStorage.addProject(projectName.trim(), rootPath);
+          const project = getProjectByName(projectName.trim());
+          if (!project) {
+            vscode.window.showErrorMessage('Project was created but could not be loaded.');
+            return;
+          }
+          activateProject(project);
+          vscode.window.showInformationMessage(`Created and opened project: ${project.name}`);
+        } catch (error) {
+          vscode.window.showErrorMessage(`Failed to create project: ${error}`);
+        }
+      }
     },
     {
       id: 'projectviewer.openProject',
@@ -138,27 +364,17 @@ export function activate(context: vscode.ExtensionContext) {
           { placeHolder: 'Select project to open' }
         );
 
-        if (selected) {
-          const project = projects.find(p => p.name === selected.label);
-          if (project) {
-            stateManager.setActiveProjectName(project.name);
-
-            // Dispose old watcher
-            if (activeWatcher) {
-              activeWatcher.dispose();
-            }
-
-            // Create new watcher
-            activeWatcher = new FileWatcher(project.rootPath, () => {
-              console.log('[Watcher] Detected changes, refreshing tree');
-              treeProvider.refresh();
-            });
-            activeWatcher.start();
-
-            treeProvider.refresh();
-            vscode.window.showInformationMessage(`Opened project: ${project.name}`);
-          }
+        if (!selected) {
+          return;
         }
+
+        const project = projects.find(p => p.name === selected.label);
+        if (!project) {
+          return;
+        }
+
+        activateProject(project);
+        vscode.window.showInformationMessage(`Opened project: ${project.name}`);
       }
     },
     {
@@ -175,6 +391,140 @@ export function activate(context: vscode.ExtensionContext) {
       }
     },
     {
+      id: 'projectviewer.renameProject',
+      handler: async (node?: ProjectNode) => {
+        const projectName = node?.label ?? stateManager.getActiveProjectName();
+        if (!projectName) {
+          vscode.window.showWarningMessage('No project selected to rename.');
+          return;
+        }
+
+        const project = getProjectByName(projectName);
+        if (!project) {
+          vscode.window.showErrorMessage(`Project not found: ${projectName}`);
+          return;
+        }
+
+        const existingProjects = projectsStorage.getProjects();
+        const newName = await vscode.window.showInputBox({
+          prompt: 'Enter new project name',
+          value: project.name,
+          validateInput: (value) => {
+            const trimmed = value.trim();
+            if (!trimmed) {
+              return 'Project name cannot be empty';
+            }
+            if (/[\\/]/.test(trimmed)) {
+              return 'Project name cannot contain path separators';
+            }
+            if (
+              trimmed !== project.name &&
+              existingProjects.some(existing => existing.name === trimmed)
+            ) {
+              return `Project name "${trimmed}" already exists`;
+            }
+            return undefined;
+          }
+        });
+
+        if (!newName || newName === project.name) {
+          return;
+        }
+
+        try {
+          projectsStorage.renameProject(project.name, newName.trim());
+          if (stateManager.getActiveProjectName() === project.name) {
+            stateManager.setActiveProjectName(newName.trim());
+          }
+          treeProvider.refresh();
+          vscode.window.showInformationMessage(`Renamed project to: ${newName.trim()}`);
+        } catch (error) {
+          vscode.window.showErrorMessage(`Failed to rename project: ${error}`);
+        }
+      }
+    },
+    {
+      id: 'projectviewer.deleteProject',
+      handler: async (node?: ProjectNode) => {
+        const projectName = node?.label ?? stateManager.getActiveProjectName();
+        if (!projectName) {
+          vscode.window.showWarningMessage('No project selected to delete.');
+          return;
+        }
+
+        const project = getProjectByName(projectName);
+        if (!project) {
+          vscode.window.showErrorMessage(`Project not found: ${projectName}`);
+          return;
+        }
+
+        const confirmed = await vscode.window.showWarningMessage(
+          `Delete project "${project.name}"? This will not delete files from disk.`,
+          { modal: true },
+          'Delete'
+        );
+
+        if (confirmed !== 'Delete') {
+          return;
+        }
+
+        try {
+          projectsStorage.removeProject(project.name);
+          const linksPath = path.join(project.rootPath, '.project-explorer-links.json');
+          try {
+            await vscode.workspace.fs.delete(vscode.Uri.file(linksPath), { useTrash: true });
+          } catch {
+            // Ignore missing links file
+          }
+
+          if (stateManager.getActiveProjectName() === project.name) {
+            if (activeWatcher) {
+              activeWatcher.dispose();
+              activeWatcher = undefined;
+            }
+            stateManager.setActiveProjectName(undefined);
+          }
+
+          treeProvider.refresh();
+          vscode.window.showInformationMessage(`Deleted project: ${project.name}`);
+        } catch (error) {
+          vscode.window.showErrorMessage(`Failed to delete project: ${error}`);
+        }
+      }
+    },
+    {
+      id: 'projectviewer.cleanProject',
+      handler: async () => {
+        const activeProjectName = stateManager.getActiveProjectName();
+        if (!activeProjectName) {
+          vscode.window.showWarningMessage('No active project to clean.');
+          return;
+        }
+
+        const project = getProjectByName(activeProjectName);
+        if (!project) {
+          vscode.window.showErrorMessage(`Project not found: ${activeProjectName}`);
+          return;
+        }
+
+        try {
+          const brokenLinks = linksStorage.getBrokenLinks(project.rootPath);
+          if (brokenLinks.length === 0) {
+            vscode.window.showInformationMessage('No broken links found.');
+            return;
+          }
+
+          brokenLinks.forEach(link => {
+            linksStorage.removeLink(project.rootPath, link.id);
+          });
+          treeProvider.refresh();
+          vscode.window.showInformationMessage(`Removed ${brokenLinks.length} broken link(s).`);
+        } catch (error) {
+          vscode.window.showErrorMessage(`Failed to clean project: ${error}`);
+        }
+      }
+    },
+    {
       id: 'projectviewer.refreshEntry',
       handler: () => {
         treeProvider.refresh();
@@ -182,32 +532,231 @@ export function activate(context: vscode.ExtensionContext) {
       }
     },
     {
-      id: 'projectviewer.renameItem',
-      handler: () => vscode.window.showInformationMessage('Rename Item')
-    },
-    {
-      id: 'projectviewer.deleteItem',
-      handler: () => vscode.window.showInformationMessage('Delete Item')
-    },
-    {
       id: 'projectviewer.addExternalLink',
-      handler: () => vscode.window.showInformationMessage('Add External Link')
+      handler: async (node?: ProjectNode) => {
+        const activeProjectName = stateManager.getActiveProjectName();
+        if (!activeProjectName) {
+          vscode.window.showWarningMessage('No active project to add external links.');
+          return;
+        }
+
+        const project = getProjectByName(activeProjectName);
+        if (!project) {
+          vscode.window.showErrorMessage(`Project not found: ${activeProjectName}`);
+          return;
+        }
+
+        const selections = await vscode.window.showOpenDialog({
+          canSelectFiles: true,
+          canSelectFolders: true,
+          canSelectMany: true,
+          openLabel: 'Add to Project'
+        });
+
+        if (!selections || selections.length === 0) {
+          return;
+        }
+
+        const parentId = node?.contextValue === 'manualDir' ? node.linkId : undefined;
+
+        try {
+          selections.forEach(selection => {
+            const itemPath = selection.fsPath;
+            const name = path.basename(itemPath);
+            linksStorage.addLink(project.rootPath, name, itemPath, undefined, parentId);
+          });
+          treeProvider.refresh();
+          vscode.window.showInformationMessage(`Added ${selections.length} external item(s).`);
+        } catch (error) {
+          vscode.window.showErrorMessage(`Failed to add external items: ${error}`);
+        }
+      }
+    },
+    {
+      id: 'projectviewer.newFile',
+      handler: async (node?: ProjectNode) => {
+        const targetDirectory = getTargetDirectory(node);
+        if (!targetDirectory) {
+          vscode.window.showWarningMessage('Select a project or directory to add a file.');
+          return;
+        }
+
+        const fileName = await vscode.window.showInputBox({
+          prompt: 'Enter new file name',
+          validateInput: (value) => {
+            const trimmed = value.trim();
+            if (!trimmed) {
+              return 'File name cannot be empty';
+            }
+            if (/[\\/]/.test(trimmed)) {
+              return 'File name cannot contain path separators';
+            }
+            return undefined;
+          }
+        });
+
+        if (!fileName) {
+          return;
+        }
+
+        const newFilePath = path.join(targetDirectory, fileName.trim());
+        if (await pathExists(newFilePath)) {
+          vscode.window.showErrorMessage(`File already exists: ${fileName.trim()}`);
+          return;
+        }
+
+        try {
+          await vscode.workspace.fs.writeFile(
+            vscode.Uri.file(newFilePath),
+            new Uint8Array()
+          );
+          treeProvider.refresh();
+          vscode.window.showInformationMessage(`Created file: ${fileName.trim()}`);
+        } catch (error) {
+          vscode.window.showErrorMessage(`Failed to create file: ${error}`);
+        }
+      }
+    },
+    {
+      id: 'projectviewer.newFolder',
+      handler: async (node?: ProjectNode) => {
+        const targetDirectory = getTargetDirectory(node);
+        if (!targetDirectory) {
+          vscode.window.showWarningMessage('Select a project or directory to add a folder.');
+          return;
+        }
+
+        const folderName = await vscode.window.showInputBox({
+          prompt: 'Enter new folder name',
+          validateInput: (value) => {
+            const trimmed = value.trim();
+            if (!trimmed) {
+              return 'Folder name cannot be empty';
+            }
+            if (/[\\/]/.test(trimmed)) {
+              return 'Folder name cannot contain path separators';
+            }
+            return undefined;
+          }
+        });
+
+        if (!folderName) {
+          return;
+        }
+
+        const newFolderPath = path.join(targetDirectory, folderName.trim());
+        if (await pathExists(newFolderPath)) {
+          vscode.window.showErrorMessage(`Folder already exists: ${folderName.trim()}`);
+          return;
+        }
+
+        try {
+          await vscode.workspace.fs.createDirectory(vscode.Uri.file(newFolderPath));
+          treeProvider.refresh();
+          vscode.window.showInformationMessage(`Created folder: ${folderName.trim()}`);
+        } catch (error) {
+          vscode.window.showErrorMessage(`Failed to create folder: ${error}`);
+        }
+      }
     },
     {
       id: 'projectviewer.removeLink',
-      handler: () => vscode.window.showInformationMessage('Remove Link')
+      handler: async (node?: ProjectNode) => {
+        const activeProjectName = stateManager.getActiveProjectName();
+        if (!activeProjectName) {
+          vscode.window.showWarningMessage('No active project to remove links.');
+          return;
+        }
+
+        if (!node?.linkId) {
+          vscode.window.showErrorMessage('Selected item is not a manual link.');
+          return;
+        }
+
+        const project = getProjectByName(activeProjectName);
+        if (!project) {
+          vscode.window.showErrorMessage(`Project not found: ${activeProjectName}`);
+          return;
+        }
+
+        const confirmed = await vscode.window.showWarningMessage(
+          `Remove link "${node.label}" from project? This will not delete files from disk.`,
+          { modal: true },
+          'Remove'
+        );
+
+        if (confirmed !== 'Remove') {
+          return;
+        }
+
+        try {
+          linksStorage.removeLink(project.rootPath, node.linkId);
+          treeProvider.refresh();
+          vscode.window.showInformationMessage(`Removed link: ${node.label}`);
+        } catch (error) {
+          vscode.window.showErrorMessage(`Failed to remove link: ${error}`);
+        }
+      }
     },
     {
       id: 'projectviewer.copyPath',
-      handler: () => vscode.window.showInformationMessage('Copy Path')
+      handler: async (node?: ProjectNode) => {
+        if (!node?.itemPath) {
+          vscode.window.showWarningMessage('No item selected to copy.');
+          return;
+        }
+
+        await vscode.env.clipboard.writeText(node.itemPath);
+        vscode.window.showInformationMessage('Copied path to clipboard.');
+      }
     },
     {
       id: 'projectviewer.copyRelativePath',
-      handler: () => vscode.window.showInformationMessage('Copy Relative Path')
+      handler: async (node?: ProjectNode) => {
+        if (!node?.itemPath) {
+          vscode.window.showWarningMessage('No item selected to copy.');
+          return;
+        }
+
+        const activeProjectName = stateManager.getActiveProjectName();
+        if (!activeProjectName) {
+          vscode.window.showWarningMessage('No active project for relative path.');
+          return;
+        }
+
+        const project = getProjectByName(activeProjectName);
+        if (!project) {
+          vscode.window.showErrorMessage(`Project not found: ${activeProjectName}`);
+          return;
+        }
+
+        const relative = path.relative(project.rootPath, node.itemPath);
+        await vscode.env.clipboard.writeText(relative);
+        vscode.window.showInformationMessage('Copied relative path to clipboard.');
+      }
     },
     {
       id: 'projectviewer.openContainingFolder',
-      handler: () => vscode.window.showInformationMessage('Open Containing Folder')
+      handler: async (node?: ProjectNode) => {
+        if (!node?.itemPath) {
+          vscode.window.showWarningMessage('No item selected to open.');
+          return;
+        }
+
+        const targetPath =
+          node.contextValue === 'physicalFile' ||
+          node.contextValue === 'manualFile' ||
+          node.contextValue === 'brokenLink'
+            ? path.dirname(node.itemPath)
+            : node.itemPath;
+
+        if (!(await pathExists(targetPath))) {
+          vscode.window.showWarningMessage('Containing folder does not exist.');
+          return;
+        }
+
+        await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(targetPath));
+      }
     }
   ];
 
@@ -217,57 +766,59 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(disposable);
   });
 
-  // Register file operation commands
+  // Reveal active file in tree
   context.subscriptions.push(
-    vscode.commands.registerCommand(
-      'projectviewer.createDirectory',
-      async (node: ProjectNode) => {
-        const projectName = node.label;
-        const project = projectsStorage.getProject(projectName);
-        if (!project) {
-          vscode.window.showErrorMessage(`Project not found: ${projectName}`);
-          return;
-        }
-
-        const dirName = await vscode.window.showInputBox({
-          prompt: 'Enter directory name',
-          validateInput: (value) => {
-            if (!value.trim()) {
-              return 'Directory name cannot be empty';
-            }
-            if (/[\/<>:"|?*]/.test(value)) {
-              return 'Directory name contains invalid characters';
-            }
-            return undefined;
-          }
-        });
-
-        if (!dirName) {
-          return;
-        }
-
-        try {
-          const fs = await import('fs');
-          const path = await import('path');
-          const newDirPath = path.join(project.rootPath, dirName);
-
-          if (fs.existsSync(newDirPath)) {
-            vscode.window.showErrorMessage(
-              `Directory already exists: ${dirName}`
-            );
-            return;
-          }
-
-          fs.mkdirSync(newDirPath, { recursive: true });
-          treeProvider.refresh();
-          vscode.window.showInformationMessage(`Created directory: ${dirName}`);
-        } catch (error) {
-          vscode.window.showErrorMessage(
-            `Failed to create directory: ${error}`
-          );
-        }
+    vscode.commands.registerCommand('projectviewer.revealActiveFile', async () => {
+      const activeEditor = vscode.window.activeTextEditor;
+      if (!activeEditor) {
+        vscode.window.showInformationMessage('No active editor to reveal.');
+        return;
       }
-    )
+
+      const activeProjectName = stateManager.getActiveProjectName();
+      if (!activeProjectName) {
+        vscode.window.showWarningMessage('No active project to reveal against.');
+        return;
+      }
+
+      const project = getProjectByName(activeProjectName);
+      if (!project) {
+        vscode.window.showErrorMessage(`Project not found: ${activeProjectName}`);
+        return;
+      }
+
+      const targetPath = activeEditor.document.uri.fsPath;
+
+      const roots = await treeProvider.getChildren();
+      const projectRoot = roots.find(root => root.label === project.name);
+      if (!projectRoot) {
+        vscode.window.showInformationMessage('Project not visible in the tree.');
+        return;
+      }
+
+      const findNodeByPath = async (node: ProjectNode): Promise<ProjectNode | undefined> => {
+        if (node.itemPath === targetPath) {
+          return node;
+        }
+
+        const children = await treeProvider.getChildren(node);
+        for (const child of children) {
+          const match = await findNodeByPath(child);
+          if (match) {
+            return match;
+          }
+        }
+        return undefined;
+      };
+
+      const match = await findNodeByPath(projectRoot);
+      if (!match) {
+        vscode.window.showInformationMessage('Active file is not part of the project tree.');
+        return;
+      }
+
+      await treeView.reveal(match, { select: true, focus: false, expand: true });
+    })
   );
 
   // Register rename command
@@ -276,15 +827,18 @@ export function activate(context: vscode.ExtensionContext) {
       'projectviewer.renameItem',
       async (node: ProjectNode) => {
         const oldName = node.label;
+        const oldPath = node.itemPath;
+        const parentDir = path.dirname(oldPath);
         const newName = await vscode.window.showInputBox({
           prompt: 'Enter new name',
           value: oldName,
           validateInput: (value) => {
-            if (!value.trim()) {
+            const trimmed = value.trim();
+            if (!trimmed) {
               return 'Name cannot be empty';
             }
-            if (/[\/<>:"|?*]/.test(value)) {
-              return 'Name contains invalid characters';
+            if (/[\\/]/.test(trimmed)) {
+              return 'Name cannot contain path separators';
             }
             return undefined;
           }
@@ -294,9 +848,22 @@ export function activate(context: vscode.ExtensionContext) {
           return;
         }
 
-        vscode.window.showInformationMessage(
-          `Rename functionality to be implemented for: ${newName}`
-        );
+        const newPath = path.join(parentDir, newName.trim());
+        if (await pathExists(newPath)) {
+          vscode.window.showErrorMessage(`An item named "${newName.trim()}" already exists.`);
+          return;
+        }
+
+        try {
+          await vscode.workspace.fs.rename(
+            vscode.Uri.file(oldPath),
+            vscode.Uri.file(newPath)
+          );
+          treeProvider.refresh();
+          vscode.window.showInformationMessage(`Renamed to: ${newName.trim()}`);
+        } catch (error) {
+          vscode.window.showErrorMessage(`Failed to rename: ${error}`);
+        }
       }
     )
   );
@@ -306,16 +873,36 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(
       'projectviewer.deleteItem',
       async (node: ProjectNode) => {
+        const itemPath = node.itemPath;
+        const uri = vscode.Uri.file(itemPath);
+        const isDirectory = node.contextValue === 'physicalDir';
+        let detail = '';
+
+        if (isDirectory) {
+          try {
+            const count = await countEntries(uri);
+            detail = ` (${count} item${count === 1 ? '' : 's'})`;
+          } catch {
+            detail = '';
+          }
+        }
+
         const result = await vscode.window.showWarningMessage(
-          `Delete "${node.label}"? This cannot be undone.`,
+          `Delete "${node.label}"${detail}? This cannot be undone.`,
           { modal: true },
           'Delete'
         );
 
-        if (result === 'Delete') {
-          vscode.window.showInformationMessage(
-            `Delete functionality to be implemented for: ${node.label}`
-          );
+        if (result !== 'Delete') {
+          return;
+        }
+
+        try {
+          await vscode.workspace.fs.delete(uri, { recursive: isDirectory, useTrash: true });
+          treeProvider.refresh();
+          vscode.window.showInformationMessage(`Deleted: ${node.label}`);
+        } catch (error) {
+          vscode.window.showErrorMessage(`Failed to delete: ${error}`);
         }
       }
     )

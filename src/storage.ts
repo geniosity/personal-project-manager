@@ -137,6 +137,34 @@ export class ProjectsStorage {
   }
 
   /**
+   * Rename a project while preserving metadata.
+   * @param currentName Existing project name
+   * @param newName New project name (must be unique)
+   * @throws Error if validation fails or project not found
+   */
+  renameProject(currentName: string, newName: string): void {
+    const projects = this.getProjects();
+
+    if (!newName || newName.trim() === '') {
+      throw new Error('Project name cannot be empty');
+    }
+
+    if (projects.some(project => project.name === newName && project.name !== currentName)) {
+      throw new Error(`Project with name "${newName}" already exists`);
+    }
+
+    const project = projects.find(p => p.name === currentName);
+    if (!project) {
+      throw new Error(`Project with name "${currentName}" not found`);
+    }
+
+    project.name = newName;
+    project.modifiedAt = Date.now();
+
+    this.writeProjects(projects);
+  }
+
+  /**
    * Find a project by name.
    * @param name Project name to find
    * @returns Project if found, undefined otherwise

@@ -9,9 +9,6 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onView:projectViewer"
-  ],
   "main": "./out/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -51,8 +48,29 @@
         "icon": "$(folder-open)"
       },
       {
+        "command": "projectviewer.revealActiveFile",
+        "title": "Reveal Active File",
+        "category": "Projects",
+        "icon": "$(target)"
+      },
+      {
         "command": "projectviewer.closeProject",
         "title": "Close Project",
+        "category": "Projects"
+      },
+      {
+        "command": "projectviewer.renameProject",
+        "title": "Rename Project",
+        "category": "Projects"
+      },
+      {
+        "command": "projectviewer.deleteProject",
+        "title": "Delete Project",
+        "category": "Projects"
+      },
+      {
+        "command": "projectviewer.cleanProject",
+        "title": "Clean Broken Links",
         "category": "Projects"
       },
       {
@@ -76,6 +94,16 @@
         "title": "Add External Link",
         "category": "Projects",
         "icon": "$(link-external)"
+      },
+      {
+        "command": "projectviewer.newFile",
+        "title": "New File",
+        "category": "Projects"
+      },
+      {
+        "command": "projectviewer.newFolder",
+        "title": "New Folder",
+        "category": "Projects"
       },
       {
         "command": "projectviewer.removeLink",
@@ -114,9 +142,79 @@
           "command": "projectviewer.addExternalLink",
           "when": "view == projectViewer",
           "group": "navigation"
+        },
+        {
+          "command": "projectviewer.cleanProject",
+          "when": "view == projectViewer",
+          "group": "navigation"
+        },
+        {
+          "command": "projectviewer.revealActiveFile",
+          "when": "view == projectViewer",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
+        {
+          "command": "projectviewer.newFile",
+          "when": "view == projectViewer && viewItem == project",
+          "group": "1_modification"
+        },
+        {
+          "command": "projectviewer.newFolder",
+          "when": "view == projectViewer && viewItem == project",
+          "group": "1_modification"
+        },
+        {
+          "command": "projectviewer.addExternalLink",
+          "when": "view == projectViewer && viewItem == project",
+          "group": "1_modification"
+        },
+        {
+          "command": "projectviewer.newFile",
+          "when": "view == projectViewer && viewItem == physicalDir",
+          "group": "1_modification"
+        },
+        {
+          "command": "projectviewer.newFolder",
+          "when": "view == projectViewer && viewItem == physicalDir",
+          "group": "1_modification"
+        },
+        {
+          "command": "projectviewer.addExternalLink",
+          "when": "view == projectViewer && viewItem == physicalDir",
+          "group": "1_modification"
+        },
+        {
+          "command": "projectviewer.newFile",
+          "when": "view == projectViewer && viewItem == manualDir",
+          "group": "1_modification"
+        },
+        {
+          "command": "projectviewer.newFolder",
+          "when": "view == projectViewer && viewItem == manualDir",
+          "group": "1_modification"
+        },
+        {
+          "command": "projectviewer.addExternalLink",
+          "when": "view == projectViewer && viewItem == manualDir",
+          "group": "1_modification"
+        },
+        {
+          "command": "projectviewer.renameProject",
+          "when": "view == projectViewer && viewItem == project",
+          "group": "1_modification"
+        },
+        {
+          "command": "projectviewer.deleteProject",
+          "when": "view == projectViewer && viewItem == project",
+          "group": "1_modification"
+        },
+        {
+          "command": "projectviewer.closeProject",
+          "when": "view == projectViewer && viewItem == project",
+          "group": "1_modification"
+        },
         {
           "command": "projectviewer.renameItem",
           "when": "view == projectViewer && viewItem =~ /^(physicalDir|physicalFile)$/",
@@ -134,7 +232,7 @@
         },
         {
           "command": "projectviewer.copyPath",
-          "when": "view == projectViewer && viewItem =~ /^(physicalDir|physicalFile|manualDir|manualFile)$/",
+          "when": "view == projectViewer && viewItem =~ /^(physicalDir|physicalFile|manualDir|manualFile|brokenLink)$/",
           "group": "2_copy"
         },
         {
