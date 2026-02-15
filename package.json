@@ -219,6 +219,11 @@
           "group": "1_modification"
         },
         {
+          "command": "projectviewer.openProject",
+          "when": "view == projectViewer && viewItem == projectsContainer",
+          "group": "navigation"
+        },
+        {
           "command": "projectviewer.renameItem",
           "when": "view == projectViewer && viewItem =~ /^(physicalDir|physicalFile)$/",
           "group": "1_modification"

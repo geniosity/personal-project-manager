@@ -86,6 +86,10 @@ function convertNodeToTreeItem(node: NodeModel): ProjectNode {
     treeItem.iconPath = new vscode.ThemeIcon('warning');
   }
 
+  if (node.contextValue === 'projectsContainer') {
+    treeItem.iconPath = new vscode.ThemeIcon('briefcase');
+  }
+
   return treeItem;
 }
 
@@ -123,23 +127,123 @@ class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode> {
   }
 
   /**
+   * Get parent node for a given element.
+   * Required for TreeView.reveal support.
+   * @param element The node to find a parent for
+   * @returns Parent node, or undefined if at root
+   */
+  getParent(element: ProjectNode): ProjectNode | undefined {
+    if (element.contextValue === 'projectsContainer') {
+      return undefined;
+    }
+
+    if (element.contextValue === 'project') {
+      const activeProjectName = this.stateManager.getActiveProjectName();
+      if (activeProjectName && element.label !== activeProjectName) {
+        return this.createProjectsContainerNode();
+      }
+      return undefined;
+    }
+
+    const activeProject = this.getActiveProject();
+    if (!activeProject) {
+      return undefined;
+    }
+
+    const projectModel = this.treeModel.createProjectModel(
+      activeProject.name,
+      activeProject.rootPath
+    );
+
+    const parentNode = this.findParentNode(projectModel, element.id);
+    if (!parentNode) {
+      return undefined;
+    }
+
+    if (parentNode.contextValue === 'project') {
+      const parentProjectNode = new ProjectNode(
+        parentNode.label,
+        vscode.TreeItemCollapsibleState.Collapsed,
+        'project',
+        parentNode.id,
+        parentNode.itemPath
+      );
+      parentProjectNode.resourceUri = vscode.Uri.file(parentNode.itemPath);
+      return parentProjectNode;
+    }
+
+    return convertNodeToTreeItem(parentNode);
+  }
+
+  /**
    * Get child nodes for a given node.
    * @param element Optional parent node; if undefined, returns root projects
    * @returns Promise resolving to array of child nodes
    */
   getChildren(element?: ProjectNode): Thenable<ProjectNode[]> {
     if (!element) {
-      // Return root level - all projects
+      // Return root level
       const projects = this.projectsStorage.getProjects();
       const activeProjectName = this.stateManager.getActiveProjectName();
+      
+      // If there's an active project, show it + a Projects container for the rest
+      if (activeProjectName) {
+        const activeProject = projects.find(p => p.name === activeProjectName);
+        const inactiveProjects = projects.filter(p => p.name !== activeProjectName);
+        
+        const result: ProjectNode[] = [];
+        
+        // Add Projects container if there are inactive projects
+        if (inactiveProjects.length > 0) {
+          result.push(this.createProjectsContainerNode());
+        }
+
+        // Add active project
+        if (activeProject) {
+          const activeNode = new ProjectNode(
+            activeProject.name,
+            vscode.TreeItemCollapsibleState.Collapsed,
+            'project',
+            `project:${activeProject.name}`,
+            activeProject.rootPath
+          );
+          activeNode.resourceUri = vscode.Uri.file(activeProject.rootPath);
+          result.push(activeNode);
+        }
+        
+        return Promise.resolve(result);
+      }
+      
+      // No active project - show all projects at root level
       return Promise.resolve(
         projects.map(
           project => {
             const node = new ProjectNode(
               project.name,
-              project.name === activeProjectName
-                ? vscode.TreeItemCollapsibleState.Collapsed
-                : vscode.TreeItemCollapsibleState.None,
+              vscode.TreeItemCollapsibleState.None,
+              'project',
+              `project:${project.name}`,
+              project.rootPath
+            );
+            node.resourceUri = vscode.Uri.file(project.rootPath);
+            return node;
+          }
+        )
+      );
+    }
+
+    // Handle Projects container
+    if (element.contextValue === 'projectsContainer') {
+      const projects = this.projectsStorage.getProjects();
+      const activeProjectName = this.stateManager.getActiveProjectName();
+      const inactiveProjects = projects.filter(p => p.name !== activeProjectName);
+      
+      return Promise.resolve(
+        inactiveProjects.map(
+          project => {
+            const node = new ProjectNode(
+              project.name,
+              vscode.TreeItemCollapsibleState.None,
               'project',
               `project:${project.name}`,
               project.rootPath
@@ -152,8 +256,11 @@ class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode> {
     }
 
     if (element.contextValue === 'project') {
+      console.log('[PPM] Getting children for project:', element.label);
       const activeProjectName = this.stateManager.getActiveProjectName();
+      console.log('[PPM] Active project:', activeProjectName);
       if (element.label !== activeProjectName) {
+        console.log('[PPM] Project not active, returning empty');
         return Promise.resolve([]);
       }
 
@@ -197,6 +304,16 @@ class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode> {
     return this.projectsStorage.getProject(activeProjectName);
   }
 
+  private createProjectsContainerNode(): ProjectNode {
+    return new ProjectNode(
+      'Projects',
+      vscode.TreeItemCollapsibleState.Collapsed,
+      'projectsContainer',
+      'projectsContainer',
+      ''
+    );
+  }
+
   private findNodeById(node: NodeModel, id: string): NodeModel | undefined {
     if (node.id === id) {
       return node;
@@ -204,6 +321,20 @@ class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode> {
 
     for (const child of node.getChildren()) {
       const found = this.findNodeById(child, id);
+      if (found) {
+        return found;
+      }
+    }
+
+    return undefined;
+  }
+
+  private findParentNode(node: NodeModel, childId: string): NodeModel | undefined {
+    for (const child of node.getChildren()) {
+      if (child.id === childId) {
+        return node;
+      }
+      const found = this.findParentNode(child, childId);
       if (found) {
         return found;
       }
@@ -228,6 +359,7 @@ export function activate(context: vscode.ExtensionContext) {
   let activeWatcher: FileWatcher | undefined;
 
   const activateProject = (project: IProject) => {
+    console.log('[PPM] Activating project:', project.name);
     stateManager.setActiveProjectName(project.name);
 
     if (activeWatcher) {
@@ -239,6 +371,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
     activeWatcher.start();
     treeProvider.refresh();
+    console.log('[PPM] Project activated:', project.name);
   };
 
   const getProjectByName = (projectName: string): IProject | undefined =>
@@ -292,11 +425,31 @@ export function activate(context: vscode.ExtensionContext) {
     )
   });
 
+  // Handle project selection (clicking on a project name to activate it)
+  treeView.onDidChangeSelection(event => {
+    console.log('[PPM] Tree selection changed, items:', event.selection.length);
+    if (event.selection.length > 0) {
+      const selected = event.selection[0];
+      console.log('[PPM] Selected item:', selected.label, 'contextValue:', selected.contextValue);
+      
+      if (selected.contextValue === 'project') {
+        console.log('[PPM] Project selected, attempting to activate:', selected.label);
+        const project = getProjectByName(selected.label);
+        if (project) {
+          activateProject(project);
+        } else {
+          console.log('[PPM] Project not found:', selected.label);
+        }
+      }
+    }
+  });
+
   // Register all commands with placeholder handlers
   const commands = [
     {
       id: 'projectviewer.createNewProject',
       handler: async () => {
+        console.log('[PPM] createNewProject command invoked');
         const selection = await vscode.window.showOpenDialog({
           canSelectFiles: false,
           canSelectFolders: true,
@@ -393,6 +546,7 @@ export function activate(context: vscode.ExtensionContext) {
     {
       id: 'projectviewer.renameProject',
       handler: async (node?: ProjectNode) => {
+        console.log('[PPM] renameProject command invoked, node:', node?.label);
         const projectName = node?.label ?? stateManager.getActiveProjectName();
         if (!projectName) {
           vscode.window.showWarningMessage('No project selected to rename.');
@@ -446,6 +600,7 @@ export function activate(context: vscode.ExtensionContext) {
     {
       id: 'projectviewer.deleteProject',
       handler: async (node?: ProjectNode) => {
+        console.log('[PPM] deleteProject command invoked, node:', node?.label);
         const projectName = node?.label ?? stateManager.getActiveProjectName();
         if (!projectName) {
           vscode.window.showWarningMessage('No project selected to delete.');
@@ -534,6 +689,7 @@ export function activate(context: vscode.ExtensionContext) {
     {
       id: 'projectviewer.addExternalLink',
       handler: async (node?: ProjectNode) => {
+        console.log('[PPM] addExternalLink command invoked, node:', node?.label);
         const activeProjectName = stateManager.getActiveProjectName();
         if (!activeProjectName) {
           vscode.window.showWarningMessage('No active project to add external links.');
