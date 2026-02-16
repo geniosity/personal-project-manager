@@ -39,6 +39,7 @@ export class LinksStorage {
    * @returns Object mapping link IDs to link data, or empty object if no links
    */
   getLinks(projectRootPath: string): Record<string, ILink> {
+    // console.log(`PPM: getLinks called for project path: ${projectRootPath}`);
     try {
       const configPath = path.join(projectRootPath, this.configFileName);
       if (!fs.existsSync(configPath)) {
@@ -52,6 +53,7 @@ export class LinksStorage {
       if (data.links && Array.isArray(data.links)) {
         // Update isBroken status based on current filesystem state
         data.links.forEach(link => {
+          // console.log(`PPM: Checking link path: ${link.path}`);
           link.isBroken = !fs.existsSync(link.path);
           linksMap[link.id] = link;
         });

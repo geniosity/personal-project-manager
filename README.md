@@ -11,7 +11,8 @@ A VS Code extension that provides a dedicated tree view interface for organizing
 - **Persistent Configuration**: Projects are saved globally and persist across VS Code sessions
 
 ### External Links
-- **Link Files and Folders**: Add external files and folders from anywhere on your system to your project tree
+- **Link Files**: Add external files from anywhere on your system to your project tree using "Add External File"
+- **Link Folders**: Add external folders from anywhere on your system to your project tree using "Add External Folder"
 - **Hierarchical Organization**: External links can be added under:
   - Project root (top-level)
   - Physical directories (filesystem folders within your project)
@@ -29,7 +30,7 @@ A VS Code extension that provides a dedicated tree view interface for organizing
 
 ### Tree View Management
 - **Physical Items**: Files and folders from your project root directory
-- **External Items**: Files and folders linked from outside the project (marked with "(external)")
+- **External Items**: Files and folders linked from outside the project (prefixed with → arrow and labeled "(external)")
 - **Broken Links**: Missing items marked with "(missing)" and warning icons
 - **Smart Sorting**: Items sorted by type (directories first, then files) and alphabetically within each category
 
@@ -102,10 +103,10 @@ This data helps identify whether the slowness is due to tree traversal, node sea
 
 ### Add External Links
 1. Right-click on any folder in the tree (or the project root)
-2. Select "Add External Link"
-3. Choose one or more files or folders from your system
+2. Select "Add External File" or "Add External Folder"
+3. Choose one or more files (or folders) from your system
 4. External items appear under the selected node with "(external)" label
-5. If you try to add the same item twice, you'll see a message: "No external items added. All selections already exist under this node."
+5. If you try to add the same item twice, you'll see a message: "No external files/folders added. All selections already exist under this node."
 
 ### Organize External Links
 - **Drag and Drop**: Drag external items to different folders to reorganize your project structure
@@ -125,14 +126,16 @@ This data helps identify whether the slowness is due to tree traversal, node sea
 ### 0.1.1
 
 **Added**:
+- Separate commands for adding external files and folders (replaces single "Add External Link")
 - External links can now be added under physical directories (not just project root)
 - Duplicate prevention: Same file/folder cannot be added twice under the same parent
 - Drag and drop support for moving external links under physical directories
+- Arrow icon (→) prefix for external items to improve visual distinction
 - Clear feedback messages for duplicate items and batch operations
 
 **Fixed**:
-- File chooser now correctly allows both files AND folders (not just folders)
 - External links now appear under the correct parent node when added
+- Proper file/folder selection on Windows and Linux (split into separate dialogs to work around platform limitations)
 
 ### 0.1.0
 
@@ -151,3 +154,7 @@ Initial release:
 This extension follows the [VS Code Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines).
 
 **Enjoy organizing your projects!**
+
+1. Create a TXT record in your DNS configuration for the following hostname:_visual-studio-marketplace-geniosity.geniosity.co.za
+2. Use this code as the value for the TXT record:65806baa-0d29-4d47-ad4b-ccb632970257
+3. Wait until your DNS configuration changes. This could take up to 72 hours.

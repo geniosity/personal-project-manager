@@ -14,17 +14,8 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
-    "viewsContainers": {
-      "explorer": [
-        {
-          "id": "projectViewerContainer",
-          "title": "Personal Project Manager",
-          "icon": "$(folder-opened)"
-        }
-      ]
-    },
     "views": {
-      "projectViewerContainer": [
+      "explorer": [
         {
           "id": "projectViewer",
           "name": "Projects"
@@ -94,7 +85,8 @@
       {
         "command": "projectviewer.cleanProject",
         "title": "Clean Broken Links",
-        "category": "Projects"
+        "category": "Projects",
+        "icon": "$(clear-all)"
       },
       {
         "command": "projectviewer.refreshEntry",
@@ -113,10 +105,16 @@
         "category": "Projects"
       },
       {
-        "command": "projectviewer.addExternalLink",
-        "title": "Add External Link",
+        "command": "projectviewer.addExternalFile",
+        "title": "Add External File",
         "category": "Projects",
-        "icon": "$(link-external)"
+        "icon": "$(file-add)"
+      },
+      {
+        "command": "projectviewer.addExternalFolder",
+        "title": "Add External Folder",
+        "category": "Projects",
+        "icon": "$(new-folder)"
       },
       {
         "command": "projectviewer.newFile",
@@ -162,11 +160,6 @@
           "group": "navigation"
         },
         {
-          "command": "projectviewer.addExternalLink",
-          "when": "view == projectViewer",
-          "group": "navigation"
-        },
-        {
           "command": "projectviewer.cleanProject",
           "when": "view == projectViewer",
           "group": "navigation"
@@ -184,7 +177,12 @@
           "group": "1_modification"
         },
         {
-          "command": "projectviewer.addExternalLink",
+          "command": "projectviewer.addExternalFile",
+          "when": "view == projectViewer && viewItem == project",
+          "group": "1_modification"
+        },
+        {
+          "command": "projectviewer.addExternalFolder",
           "when": "view == projectViewer && viewItem == project",
           "group": "1_modification"
         },
@@ -199,7 +197,12 @@
           "group": "1_modification"
         },
         {
-          "command": "projectviewer.addExternalLink",
+          "command": "projectviewer.addExternalFile",
+          "when": "view == projectViewer && viewItem == physicalDir",
+          "group": "1_modification"
+        },
+        {
+          "command": "projectviewer.addExternalFolder",
           "when": "view == projectViewer && viewItem == physicalDir",
           "group": "1_modification"
         },
@@ -214,7 +217,12 @@
           "group": "1_modification"
         },
         {
-          "command": "projectviewer.addExternalLink",
+          "command": "projectviewer.addExternalFile",
+          "when": "view == projectViewer && viewItem == manualDir",
+          "group": "1_modification"
+        },
+        {
+          "command": "projectviewer.addExternalFolder",
           "when": "view == projectViewer && viewItem == manualDir",
           "group": "1_modification"
         },

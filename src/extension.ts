@@ -52,6 +52,7 @@ function convertNodeToTreeItem(node: NodeModel): ProjectNode {
   const isFile = node.contextValue === 'physicalFile' || node.contextValue === 'manualFile';
   const isFolder = node.contextValue === 'physicalDir' || node.contextValue === 'manualDir';
   const isBroken = node.contextValue === 'brokenLink';
+  const isExternal = node.contextValue === 'manualFile' || node.contextValue === 'manualDir';
   const collapsibleState = node.collapsible
     ? vscode.TreeItemCollapsibleState.Collapsed
     : vscode.TreeItemCollapsibleState.None;
@@ -64,8 +65,11 @@ function convertNodeToTreeItem(node: NodeModel): ProjectNode {
       }
     : undefined;
 
+  // Add arrow prefix for external items
+  const displayLabel = isExternal ? `→ ${node.label}` : node.label;
+
   const treeItem = new ProjectNode(
-    node.label,
+    displayLabel,
     collapsibleState,
     node.contextValue,
     node.id,
@@ -78,7 +82,7 @@ function convertNodeToTreeItem(node: NodeModel): ProjectNode {
     treeItem.resourceUri = vscode.Uri.file(node.itemPath);
   }
 
-  if (node.contextValue === 'manualFile' || node.contextValue === 'manualDir') {
+  if (isExternal) {
     treeItem.description = '(external)';
   }
 
@@ -706,6 +710,18 @@ export function activate(context: vscode.ExtensionContext) {
             return;
           }
 
+          // Show confirmation dialog
+          const message = `Found ${brokenLinks.length} broken link(s) to missing external files. Do you want to remove them?`;
+          const action = await vscode.window.showWarningMessage(
+            message,
+            { modal: true },
+            'Remove'
+          );
+
+          if (action !== 'Remove') {
+            return;
+          }
+
           brokenLinks.forEach(link => {
             linksStorage.removeLink(project.rootPath, link.id);
           });
@@ -724,12 +740,12 @@ export function activate(context: vscode.ExtensionContext) {
       }
     },
     {
-      id: 'projectviewer.addExternalLink',
+      id: 'projectviewer.addExternalFile',
       handler: async (node?: ProjectNode) => {
-        console.log('[PPM] addExternalLink command invoked, node:', node?.label);
+        console.log('[PPM] addExternalFile command invoked, node:', node?.label);
         const activeProjectName = stateManager.getActiveProjectName();
         if (!activeProjectName) {
-          vscode.window.showWarningMessage('No active project to add external links.');
+          vscode.window.showWarningMessage('No active project to add external files.');
           return;
         }
 
@@ -741,9 +757,9 @@ export function activate(context: vscode.ExtensionContext) {
 
         const selections = await vscode.window.showOpenDialog({
           canSelectFiles: true,
-          canSelectFolders: true,
+          canSelectFolders: false,
           canSelectMany: true,
-          openLabel: 'Add to Project'
+          openLabel: 'Add File(s) to Project'
         });
 
         if (!selections || selections.length === 0) {
@@ -781,23 +797,100 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         if (errors.length > 0) {
-          vscode.window.showErrorMessage(`Failed to add ${errors.length} external item(s): ${errors[0]}`);
+          vscode.window.showErrorMessage(`Failed to add ${errors.length} external file(s): ${errors[0]}`);
           return;
         }
 
         if (addedCount === 0 && skippedCount > 0) {
-          vscode.window.showWarningMessage('No external items added. All selections already exist under this node.');
+          vscode.window.showWarningMessage('No external files added. All selections already exist under this node.');
           return;
         }
 
         if (skippedCount > 0) {
           vscode.window.showInformationMessage(
-            `Added ${addedCount} external item(s). Skipped ${skippedCount} duplicate(s).`
+            `Added ${addedCount} external file(s). Skipped ${skippedCount} duplicate(s).`
           );
           return;
         }
 
-        vscode.window.showInformationMessage(`Added ${addedCount} external item(s).`);
+        vscode.window.showInformationMessage(`Added ${addedCount} external file(s).`);
+      }
+    },
+    {
+      id: 'projectviewer.addExternalFolder',
+      handler: async (node?: ProjectNode) => {
+        console.log('[PPM] addExternalFolder command invoked, node:', node?.label);
+        const activeProjectName = stateManager.getActiveProjectName();
+        if (!activeProjectName) {
+          vscode.window.showWarningMessage('No active project to add external folders.');
+          return;
+        }
+
+        const project = getProjectByName(activeProjectName);
+        if (!project) {
+          vscode.window.showErrorMessage(`Project not found: ${activeProjectName}`);
+          return;
+        }
+
+        const selections = await vscode.window.showOpenDialog({
+          canSelectFiles: false,
+          canSelectFolders: true,
+          canSelectMany: true,
+          openLabel: 'Add Folder(s) to Project'
+        });
+
+        if (!selections || selections.length === 0) {
+          return;
+        }
+
+        const parentId = node?.contextValue === 'manualDir'
+          ? node.linkId
+          : node?.contextValue === 'physicalDir'
+            ? node.id
+            : undefined;
+
+        let addedCount = 0;
+        let skippedCount = 0;
+        const errors: string[] = [];
+
+        for (const selection of selections) {
+          const itemPath = selection.fsPath;
+          const name = path.basename(itemPath);
+          try {
+            linksStorage.addLink(project.rootPath, name, itemPath, undefined, parentId);
+            addedCount++;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (message.includes('already exists')) {
+              skippedCount++;
+            } else {
+              errors.push(message);
+            }
+          }
+        }
+
+        if (addedCount > 0) {
+          treeProvider.refresh();
+        }
+
+        if (errors.length > 0) {
+          vscode.window.showErrorMessage(`Failed to add ${errors.length} external folder(s): ${errors[0]}`);
+          return;
+        }
+
+        if (addedCount === 0 && skippedCount > 0) {
+          vscode.window.showWarningMessage('No external folders added. All selections already exist under this node.');
+          return;
+        }
+
+        if (skippedCount > 0) {
+          vscode.window.showInformationMessage(
+            `Added ${addedCount} external folder(s). Skipped ${skippedCount} duplicate(s).`
+          );
+          return;
+        }
+
+        vscode.window.showInformationMessage(`Added ${addedCount} external folder(s).`);
       }
     },
     {
