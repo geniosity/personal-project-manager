@@ -37,6 +37,21 @@
         "contents": "No projects yet.\n[Create New Project](command:projectviewer.createNewProject)\n[Open Project](command:projectviewer.openProject)"
       }
     ],
+    "configuration": {
+      "title": "Personal Project Manager",
+      "properties": {
+        "projectviewer.enableRevealActiveFile": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show the Reveal Active File command and button."
+        },
+        "projectviewer.revealActiveFileLogging": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable debug logging for Reveal Active File timing."
+        }
+      }
+    },
     "commands": [
       {
         "command": "projectviewer.createNewProject",
@@ -55,6 +70,11 @@
         "title": "Reveal Active File",
         "category": "Projects",
         "icon": "$(target)"
+      },
+      {
+        "command": "projectviewer.toggleRevealActiveFile",
+        "title": "Toggle Reveal Active File Feature",
+        "category": "Projects"
       },
       {
         "command": "projectviewer.closeProject",
@@ -148,11 +168,6 @@
         },
         {
           "command": "projectviewer.cleanProject",
-          "when": "view == projectViewer",
-          "group": "navigation"
-        },
-        {
-          "command": "projectviewer.revealActiveFile",
           "when": "view == projectViewer",
           "group": "navigation"
         }
@@ -252,6 +267,12 @@
           "command": "projectviewer.openContainingFolder",
           "when": "view == projectViewer && viewItem =~ /^(physicalDir|physicalFile|manualDir|manualFile)$/",
           "group": "2_copy"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "projectviewer.revealActiveFile",
+          "when": "projectviewer.enableRevealActiveFile"
         }
       ]
     }

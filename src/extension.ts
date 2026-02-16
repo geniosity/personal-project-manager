@@ -133,7 +133,7 @@ class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode> {
    * @returns Parent node, or undefined if at root
    */
   getParent(element: ProjectNode): ProjectNode | undefined {
-    if (element.contextValue === 'projectsContainer') {
+    if (element.contextValue === 'projectsContainer' || element.contextValue === 'separator') {
       return undefined;
     }
 
@@ -196,6 +196,16 @@ class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode> {
         // Add Projects container if there are inactive projects
         if (inactiveProjects.length > 0) {
           result.push(this.createProjectsContainerNode());
+          
+          // Add separator
+          const separator = new ProjectNode(
+            '─────────────────',
+            vscode.TreeItemCollapsibleState.None,
+            'separator',
+            'separator',
+            ''
+          );
+          result.push(separator);
         }
 
         // Add active project
@@ -306,7 +316,7 @@ class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode> {
 
   private createProjectsContainerNode(): ProjectNode {
     return new ProjectNode(
-      'Projects',
+      'All Projects',
       vscode.TreeItemCollapsibleState.Collapsed,
       'projectsContainer',
       'projectsContainer',
@@ -354,6 +364,8 @@ export function activate(context: vscode.ExtensionContext) {
   const linksStorage = new LinksStorage();
   const stateManager = new StateManager(context);
   const treeModel = new TreeModel(linksStorage);
+  const outputChannel = vscode.window.createOutputChannel('Personal Project Manager');
+  context.subscriptions.push(outputChannel);
 
   // Track active watcher
   let activeWatcher: FileWatcher | undefined;
@@ -412,6 +424,31 @@ export function activate(context: vscode.ExtensionContext) {
     }
     return count;
   };
+
+  const isRevealActiveFileEnabled = (): boolean =>
+    vscode.workspace.getConfiguration('projectviewer').get<boolean>('enableRevealActiveFile', false);
+
+  const shouldLogRevealActiveFile = (): boolean =>
+    vscode.workspace.getConfiguration('projectviewer').get<boolean>('revealActiveFileLogging', false);
+
+  const logRevealActiveFile = (message: string): void => {
+    if (shouldLogRevealActiveFile()) {
+      outputChannel.appendLine(`[RevealActiveFile] ${message}`);
+    }
+  };
+
+  const toggleRevealActiveFileFeature = async (): Promise<void> => {
+    const config = vscode.workspace.getConfiguration('projectviewer');
+    const isEnabled = config.get<boolean>('enableRevealActiveFile', false);
+    await config.update('enableRevealActiveFile', !isEnabled, vscode.ConfigurationTarget.Global);
+    const newState = !isEnabled ? 'enabled' : 'disabled';
+    vscode.window.showInformationMessage(`Reveal Active File is now ${newState}.`);
+  };
+
+  // Register toggle command
+  context.subscriptions.push(
+    vscode.commands.registerCommand('projectviewer.toggleRevealActiveFile', toggleRevealActiveFileFeature)
+  );
 
   // Create and register the tree provider
   const treeProvider = new ProjectTreeProvider(projectsStorage, linksStorage, stateManager, treeModel);
@@ -925,6 +962,12 @@ export function activate(context: vscode.ExtensionContext) {
   // Reveal active file in tree
   context.subscriptions.push(
     vscode.commands.registerCommand('projectviewer.revealActiveFile', async () => {
+      if (!isRevealActiveFileEnabled()) {
+        vscode.window.showInformationMessage('Reveal Active File is disabled in settings.');
+        return;
+      }
+
+      const startTime = Date.now();
       const activeEditor = vscode.window.activeTextEditor;
       if (!activeEditor) {
         vscode.window.showInformationMessage('No active editor to reveal.');
@@ -944,15 +987,20 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       const targetPath = activeEditor.document.uri.fsPath;
+      logRevealActiveFile(`Start; targetPath=${targetPath}`);
 
+      const rootsStart = Date.now();
       const roots = await treeProvider.getChildren();
+      logRevealActiveFile(`Root nodes fetched in ${Date.now() - rootsStart}ms; count=${roots.length}`);
       const projectRoot = roots.find(root => root.label === project.name);
       if (!projectRoot) {
         vscode.window.showInformationMessage('Project not visible in the tree.');
         return;
       }
 
+      let visitedNodes = 0;
       const findNodeByPath = async (node: ProjectNode): Promise<ProjectNode | undefined> => {
+        visitedNodes += 1;
         if (node.itemPath === targetPath) {
           return node;
         }
@@ -967,13 +1015,21 @@ export function activate(context: vscode.ExtensionContext) {
         return undefined;
       };
 
+      const searchStart = Date.now();
       const match = await findNodeByPath(projectRoot);
+      logRevealActiveFile(
+        `Search finished in ${Date.now() - searchStart}ms; visited=${visitedNodes}`
+      );
       if (!match) {
         vscode.window.showInformationMessage('Active file is not part of the project tree.');
         return;
       }
 
+      const revealStart = Date.now();
       await treeView.reveal(match, { select: true, focus: false, expand: true });
+      logRevealActiveFile(
+        `Reveal completed in ${Date.now() - revealStart}ms; total=${Date.now() - startTime}ms`
+      );
     })
   );
 
