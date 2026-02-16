@@ -3,6 +3,7 @@
   "displayName": "Personal Project Manager",
   "description": "Personal Project Manager is a VS Code extension that provides a dedicated tree view interface for organizing and managing logical \"projects\". Unlike file/folder management extensions, this extension enables users to create custom project definitions that aggregate files and folders from anywhere on their filesystem into a single coherent view. Projects are scoped to a root directory but can include manually linked external files and folders, creating a flexible organizational system that transcends filesystem boundaries.",
   "version": "0.0.1",
+  "icon": "assets/ppm-logo-128x128.png",
   "engines": {
     "vscode": "^1.109.0"
   },
