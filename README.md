@@ -20,8 +20,6 @@ A VS Code extension that provides a dedicated tree view interface for organizing
 - **Smart Duplicate Prevention**: The extension prevents adding the same file/folder twice under the same parent node
 - **Drag and Drop**: Move external links between project nodes by dragging them in the tree view
 
-![External Links Example](images/external-links.png)
-
 ### File System Integration
 - **Real-time Synchronization**: Tree view automatically updates when files change on disk
 - **Native File Operations**: Create, rename, and delete files/folders directly from the tree view
