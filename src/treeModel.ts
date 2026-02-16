@@ -34,7 +34,11 @@ class PhysicalDirModel extends NodeModel {
   readonly collapsible = true;
   readonly itemPath: string;
 
-  constructor(public readonly dirPath: string) {
+  constructor(
+    public readonly dirPath: string,
+    private projectRootPath?: string,
+    private linksStorage?: LinksStorage
+  ) {
     super();
     this.itemPath = dirPath;
     this.label = path.basename(dirPath);
@@ -49,13 +53,26 @@ class PhysicalDirModel extends NodeModel {
         const fullPath = path.join(this.dirPath, item);
         const stat = fs.statSync(fullPath);
         if (stat.isDirectory()) {
-          children.push(new PhysicalDirModel(fullPath));
+          children.push(new PhysicalDirModel(fullPath, this.projectRootPath, this.linksStorage));
         } else {
           children.push(new PhysicalFileModel(fullPath));
         }
       });
     } catch (error) {
       console.error(`Error reading directory ${this.dirPath}:`, error);
+    }
+    if (this.projectRootPath && this.linksStorage) {
+      try {
+        const links = this.linksStorage.getLinks(this.projectRootPath);
+        const childLinks = Object.values(links).filter(
+          link => link.parentId === this.id
+        );
+        childLinks.forEach(link => {
+          children.push(createLinkNode(link, this.projectRootPath!, this.linksStorage!));
+        });
+      } catch (error) {
+        console.error(`Error reading child links for ${this.id}:`, error);
+      }
     }
     return sortNodes(children);
   }
@@ -115,7 +132,7 @@ class ManualDirModel extends NodeModel {
         const fullPath = path.join(this.link.path, item);
         const stat = fs.statSync(fullPath);
         if (stat.isDirectory()) {
-          children.push(new PhysicalDirModel(fullPath));
+          children.push(new PhysicalDirModel(fullPath, this.projectRootPath, this.linksStorage));
         } else {
           children.push(new PhysicalFileModel(fullPath));
         }
@@ -219,7 +236,7 @@ class ProjectModel extends NodeModel {
           const fullPath = path.join(this.projectPath, item);
           const stat = fs.statSync(fullPath);
           if (stat.isDirectory()) {
-            children.push(new PhysicalDirModel(fullPath));
+            children.push(new PhysicalDirModel(fullPath, this.projectPath, this.linksStorage));
           } else {
             children.push(new PhysicalFileModel(fullPath));
           }

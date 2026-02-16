@@ -74,6 +74,27 @@ suite('TreeModel Tests', () => {
     assert.strictEqual(manualDirs.length, 1);
   });
 
+  test('should place manual links under physical directories when parentId matches', () => {
+    const externalDir = fs.mkdtempSync(path.join(tempDir, 'external-'));
+    const physicalDirPath = path.join(projectDir, 'physicalDir1');
+    const parentId = `physicalDir:${physicalDirPath}`;
+
+    linksStorage.addLink(projectDir, 'externalChild', externalDir, undefined, parentId);
+
+    const model = treeModel.createProjectModel('TestProject', projectDir);
+    const children = model.getChildren();
+    const physicalDir = children.find(
+      c => c.contextValue === 'physicalDir' && c.itemPath === physicalDirPath
+    );
+
+    assert.ok(physicalDir, 'Expected physicalDir1 to exist');
+
+    const physicalChildren = physicalDir!.getChildren();
+    const manualDirs = physicalChildren.filter(c => c.contextValue === 'manualDir');
+    assert.strictEqual(manualDirs.length, 1);
+    assert.strictEqual(manualDirs[0].label, 'externalChild');
+  });
+
   test('should identify broken links', () => {
     const externalDir = fs.mkdtempSync(path.join(tempDir, 'external-'));
     const linkId = linksStorage.addLink(projectDir, 'brokenLink', externalDir);

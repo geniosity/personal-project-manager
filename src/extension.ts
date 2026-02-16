@@ -750,19 +750,54 @@ export function activate(context: vscode.ExtensionContext) {
           return;
         }
 
-        const parentId = node?.contextValue === 'manualDir' ? node.linkId : undefined;
+        const parentId = node?.contextValue === 'manualDir'
+          ? node.linkId
+          : node?.contextValue === 'physicalDir'
+            ? node.id
+            : undefined;
 
-        try {
-          selections.forEach(selection => {
-            const itemPath = selection.fsPath;
-            const name = path.basename(itemPath);
+        let addedCount = 0;
+        let skippedCount = 0;
+        const errors: string[] = [];
+
+        for (const selection of selections) {
+          const itemPath = selection.fsPath;
+          const name = path.basename(itemPath);
+          try {
             linksStorage.addLink(project.rootPath, name, itemPath, undefined, parentId);
-          });
-          treeProvider.refresh();
-          vscode.window.showInformationMessage(`Added ${selections.length} external item(s).`);
-        } catch (error) {
-          vscode.window.showErrorMessage(`Failed to add external items: ${error}`);
+            addedCount++;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (message.includes('already exists')) {
+              skippedCount++;
+            } else {
+              errors.push(message);
+            }
+          }
         }
+
+        if (addedCount > 0) {
+          treeProvider.refresh();
+        }
+
+        if (errors.length > 0) {
+          vscode.window.showErrorMessage(`Failed to add ${errors.length} external item(s): ${errors[0]}`);
+          return;
+        }
+
+        if (addedCount === 0 && skippedCount > 0) {
+          vscode.window.showWarningMessage('No external items added. All selections already exist under this node.');
+          return;
+        }
+
+        if (skippedCount > 0) {
+          vscode.window.showInformationMessage(
+            `Added ${addedCount} external item(s). Skipped ${skippedCount} duplicate(s).`
+          );
+          return;
+        }
+
+        vscode.window.showInformationMessage(`Added ${addedCount} external item(s).`);
       }
     },
     {

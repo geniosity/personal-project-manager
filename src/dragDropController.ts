@@ -133,6 +133,8 @@ export class TreeDragDropController implements vscode.TreeDragAndDropController<
         parentId = undefined;
       } else if (target.contextValue === 'manualDir') {
         parentId = target.linkId;
+      } else if (target.contextValue === 'physicalDir') {
+        parentId = `physicalDir:${target.itemPath}`;
       } else {
         vscode.window.showWarningMessage('Manual links can only be dropped on project or manual folders.');
         return;

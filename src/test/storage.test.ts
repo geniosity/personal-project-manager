@@ -95,6 +95,15 @@ suite('Storage Layer Tests', () => {
       }, /does not exist/);
     });
 
+    test('should prevent duplicate links for the same parent', () => {
+      const linkPath = fs.mkdtempSync(path.join(tempDir, 'external-'));
+      linksStorage.addLink(projectDir, 'TestLink', linkPath);
+
+      assert.throws(() => {
+        linksStorage.addLink(projectDir, 'TestLinkDuplicate', linkPath);
+      }, /already exists/);
+    });
+
     test('should remove a link', () => {
       const linkPath = fs.mkdtempSync(path.join(tempDir, 'external-'));
       const linkId = linksStorage.addLink(projectDir, 'TestLink', linkPath);

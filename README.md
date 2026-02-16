@@ -1,16 +1,47 @@
-# personal-project-manager README
+# Personal Project Manager
 
-This is the README for your extension "personal-project-manager". After writing up a brief description, we recommend including the following sections.
+A VS Code extension that provides a dedicated tree view interface for organizing and managing logical "projects". Unlike traditional file/folder management extensions, Personal Project Manager enables you to create custom project definitions that aggregate files and folders from anywhere on your filesystem into a single coherent view.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+### Project Organization
+- **Create Multiple Projects**: Define and manage multiple logical projects with unique names
+- **Flexible Project Roots**: Each project is anchored to a root directory on your filesystem
+- **Quick Project Switching**: Easily switch between projects using the Open Project command
+- **Persistent Configuration**: Projects are saved globally and persist across VS Code sessions
 
-For example if there is an image subfolder under your extension project workspace:
+### External Links
+- **Link Files and Folders**: Add external files and folders from anywhere on your system to your project tree
+- **Hierarchical Organization**: External links can be added under:
+  - Project root (top-level)
+  - Physical directories (filesystem folders within your project)
+  - Other external folders (nested external links)
+- **Smart Duplicate Prevention**: The extension prevents adding the same file/folder twice under the same parent node
+- **Drag and Drop**: Move external links between project nodes by dragging them in the tree view
 
-\!\[feature X\]\(images/feature-x.png\)
+![External Links Example](images/external-links.png)
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+### File System Integration
+- **Real-time Synchronization**: Tree view automatically updates when files change on disk
+- **Native File Operations**: Create, rename, and delete files/folders directly from the tree view
+- **Broken Link Detection**: Missing external files/folders are clearly marked with warning icons
+- **Clean Project**: Remove all broken links with a single command
+
+### Tree View Management
+- **Physical Items**: Files and folders from your project root directory
+- **External Items**: Files and folders linked from outside the project (marked with "(external)")
+- **Broken Links**: Missing items marked with "(missing)" and warning icons
+- **Smart Sorting**: Items sorted by type (directories first, then files) and alphabetically within each category
+
+### Context Menu Operations
+Rich context menus provide quick access to common operations:
+- Create new files and folders
+- Rename and delete items
+- Add external items to any folder
+- Remove external links (without deleting the actual files)
+- Copy absolute or relative paths
+- Open containing folder in system explorer
+- Reveal active file in project tree
 
 ## Extension Settings
 
@@ -61,50 +92,62 @@ If you experience slowness or memory issues:
 
 This data helps identify whether the slowness is due to tree traversal, node searching, or the reveal operation itself.
 
+## Getting Started
+
+### Create Your First Project
+1. Click the "+" button in the Project Manager view title bar
+2. Select a folder as your project root
+3. Enter a unique project name
+4. The project tree will appear showing all files and folders in the root directory
+
+### Add External Links
+1. Right-click on any folder in the tree (or the project root)
+2. Select "Add External Link"
+3. Choose one or more files or folders from your system
+4. External items appear under the selected node with "(external)" label
+5. If you try to add the same item twice, you'll see a message: "No external items added. All selections already exist under this node."
+
+### Organize External Links
+- **Drag and Drop**: Drag external items to different folders to reorganize your project structure
+- **Remove Links**: Right-click external items and select "Remove from Project" (doesn't delete the actual files)
+- **Clean Broken Links**: Click the broom icon in the title bar to remove all missing external links at once
+
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+- VS Code 1.109.0 or higher
 
 ## Known Issues
 
-- Calling out known issues can help limit users opening duplicate issues against your extension.
 - The "Reveal Active File" feature is disabled by default due to ongoing performance investigation. See [Reveal Active File Feature](#reveal-active-file-feature) for details.
 
 ## Release Notes
 
-Users appreciate release notes as you update your extension.
+### 0.1.1
 
-### 1.0.0
+**Added**:
+- External links can now be added under physical directories (not just project root)
+- Duplicate prevention: Same file/folder cannot be added twice under the same parent
+- Drag and drop support for moving external links under physical directories
+- Clear feedback messages for duplicate items and batch operations
 
-Initial release of ...
+**Fixed**:
+- File chooser now correctly allows both files AND folders (not just folders)
+- External links now appear under the correct parent node when added
 
-### 1.0.1
+### 0.1.0
 
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
+Initial release:
+- Project creation and management
+- Tree view with real-time file system watching
+- External file/folder linking
+- Context menu operations
+- Drag and drop support
+- Broken link detection
 
 ---
 
-## Following extension guidelines
+## Following Extension Guidelines
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+This extension follows the [VS Code Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines).
 
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+**Enjoy organizing your projects!**

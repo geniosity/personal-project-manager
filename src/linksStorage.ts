@@ -89,6 +89,14 @@ export class LinksStorage {
     }
 
     const links = this.getLinks(projectRootPath);
+    const normalizedLinkPath = this.normalizePathForCompare(linkPath);
+    const existing = Object.values(links).find(link =>
+      this.normalizePathForCompare(link.path) === normalizedLinkPath &&
+      link.parentId === parentId
+    );
+    if (existing) {
+      throw new Error('Link already exists for this parent');
+    }
     const linkId = `link-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
     const newLink: ILink = {
@@ -104,6 +112,14 @@ export class LinksStorage {
     this.writeLinks(projectRootPath, Object.values(links));
 
     return linkId;
+  }
+
+  private normalizePathForCompare(targetPath: string): string {
+    const resolved = path.resolve(targetPath);
+    if (process.platform === 'win32') {
+      return resolved.toLowerCase();
+    }
+    return resolved;
   }
 
   /**
