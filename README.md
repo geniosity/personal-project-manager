@@ -154,7 +154,3 @@ Initial release:
 This extension follows the [VS Code Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines).
 
 **Enjoy organizing your projects!**
-
-1. Create a TXT record in your DNS configuration for the following hostname:_visual-studio-marketplace-geniosity.geniosity.co.za
-2. Use this code as the value for the TXT record:65806baa-0d29-4d47-ad4b-ccb632970257
-3. Wait until your DNS configuration changes. This could take up to 72 hours.
