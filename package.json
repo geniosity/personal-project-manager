@@ -152,17 +152,17 @@
         {
           "command": "projectviewer.createNewProject",
           "when": "view == projectViewer",
-          "group": "navigation"
+          "group": "navigation@1"
         },
         {
           "command": "projectviewer.refreshEntry",
           "when": "view == projectViewer",
-          "group": "navigation"
+          "group": "navigation@2"
         },
         {
           "command": "projectviewer.cleanProject",
           "when": "view == projectViewer",
-          "group": "navigation"
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
