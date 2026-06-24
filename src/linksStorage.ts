@@ -51,12 +51,30 @@ export class LinksStorage {
       const linksMap: Record<string, ILink> = {};
 
       if (data.links && Array.isArray(data.links)) {
-        // Update isBroken status based on current filesystem state
         data.links.forEach(link => {
-          // console.log(`PPM: Checking link path: ${link.path}`);
+          if (!link || typeof link.id !== 'string' || !this.isSafeLinkPath(link.path)) {
+            return; // drop malformed or unsafe entries
+          }
+          link.name = this.sanitizeLinkName(link.name, path.basename(link.path));
           link.isBroken = !fs.existsSync(link.path);
           linksMap[link.id] = link;
         });
+
+        // Detach dangling/cyclic manual-link parent chains. A parentId that starts
+        // with "physicalDir:" is a physical parent and is left as-is (kept in sync by
+        // reparentLinks); only manual-link parent references are walked here.
+        for (const link of Object.values(linksMap)) {
+          const seen = new Set<string>([link.id]);
+          let current = link.parentId;
+          while (current && !current.startsWith('physicalDir:')) {
+            if (seen.has(current) || !linksMap[current]) {
+              link.parentId = undefined;
+              break;
+            }
+            seen.add(current);
+            current = linksMap[current].parentId;
+          }
+        }
       }
 
       return linksMap;
@@ -114,6 +132,33 @@ export class LinksStorage {
     this.writeLinks(projectRootPath, Object.values(links));
 
     return linkId;
+  }
+
+  /**
+   * A link path is safe only if it is a non-empty, absolute, non-UNC string.
+   * UNC paths (\\host\share or //host/share) are rejected because stat-ing one on
+   * Windows triggers an outbound SMB auth that can leak the user's NTLM hash.
+   */
+  private isSafeLinkPath(p: unknown): p is string {
+    if (typeof p !== 'string' || p.length === 0) {
+      return false;
+    }
+    if (/^[\\/]{2}/.test(p)) {
+      return false;
+    }
+    return path.isAbsolute(p);
+  }
+
+  /**
+   * Strip control characters and bidi/RTL override codepoints that could be used
+   * to spoof how a tree label reads. Falls back to a safe default if empty.
+   */
+  private sanitizeLinkName(name: unknown, fallback: string): string {
+    if (typeof name !== 'string') {
+      return fallback;
+    }
+    const cleaned = name.replace(/[\x00-\x1F\x7F\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, '').trim();
+    return cleaned.length > 0 ? cleaned : fallback;
   }
 
   private normalizePathForCompare(targetPath: string): string {

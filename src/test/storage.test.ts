@@ -145,6 +145,53 @@ suite('Storage Layer Tests', () => {
       assert.ok(!files.some(f => f.endsWith('.tmp')));
     });
 
+    test('getLinks drops UNC and non-absolute paths', () => {
+      const good = fs.mkdtempSync(path.join(tempDir, 'good-'));
+      const config = {
+        version: 1,
+        links: [
+          { id: 'a', name: 'good', path: good, isBroken: false },
+          { id: 'b', name: 'unc', path: '\\\\attacker\\share\\x', isBroken: false },
+          { id: 'c', name: 'relative', path: 'not/absolute', isBroken: false }
+        ]
+      };
+      fs.writeFileSync(path.join(projectDir, '.project-explorer-links.json'), JSON.stringify(config));
+
+      const links = linksStorage.getLinks(projectDir);
+      assert.ok(links['a'], 'absolute local path kept');
+      assert.strictEqual(links['b'], undefined, 'UNC path dropped');
+      assert.strictEqual(links['c'], undefined, 'relative path dropped');
+    });
+
+    test('getLinks strips control/RTL characters from names', () => {
+      const target = fs.mkdtempSync(path.join(tempDir, 'tgt-'));
+      const config = {
+        version: 1,
+        links: [{ id: 'a', name: 'a\u202Eevil\nname', path: target, isBroken: false }]
+      };
+      fs.writeFileSync(path.join(projectDir, '.project-explorer-links.json'), JSON.stringify(config));
+
+      const name = linksStorage.getLinks(projectDir)['a'].name;
+      assert.ok(!/[\x00-\x1F\u202A-\u202E]/.test(name), 'control/bidi chars removed');
+    });
+
+    test('getLinks detaches a cyclic manual-link parent', () => {
+      const t1 = fs.mkdtempSync(path.join(tempDir, 't1-'));
+      const t2 = fs.mkdtempSync(path.join(tempDir, 't2-'));
+      const config = {
+        version: 1,
+        links: [
+          { id: 'a', name: 'a', path: t1, isBroken: false, parentId: 'b' },
+          { id: 'b', name: 'b', path: t2, isBroken: false, parentId: 'a' }
+        ]
+      };
+      fs.writeFileSync(path.join(projectDir, '.project-explorer-links.json'), JSON.stringify(config));
+
+      const links = linksStorage.getLinks(projectDir);
+      // At least one of the two must be detached to break the cycle.
+      assert.ok(links['a'].parentId === undefined || links['b'].parentId === undefined);
+    });
+
     test('reparentLinks repoints child links from an old dir id to a new dir id', () => {
       const childTarget = fs.mkdtempSync(path.join(tempDir, 'child-'));
       const oldDir = path.join(projectDir, 'oldName');
