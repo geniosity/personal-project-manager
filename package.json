@@ -305,6 +305,12 @@
       ]
     }
   },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "External link paths read from a project's .project-explorer-links.json are validated (absolute, non-UNC) before use."
+    }
+  },
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
