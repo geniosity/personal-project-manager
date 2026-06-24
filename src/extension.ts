@@ -364,7 +364,7 @@ class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode> {
  */
 export function activate(context: vscode.ExtensionContext) {
   // Initialize storage services
-  const projectsStorage = new ProjectsStorage(context.globalStoragePath);
+  const projectsStorage = new ProjectsStorage(context.globalStorageUri.fsPath);
   const linksStorage = new LinksStorage();
   const stateManager = new StateManager(context);
   const treeModel = new TreeModel(linksStorage);
@@ -1257,6 +1257,30 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }
   });
+
+  // Restore the previously active project's watcher on startup. The tree already
+  // renders the active project (getChildren reads stateManager), but without this
+  // the FileWatcher is never recreated, so on-disk changes stop appearing until the
+  // user re-selects the project. We deliberately do NOT call activateProject() here:
+  // that would re-fire recent-project churn and refresh. We only need the watcher.
+  const restoreActiveProject = (): void => {
+    const persistedName = stateManager.getActiveProjectName();
+    if (!persistedName) {
+      return;
+    }
+    const project = projectsStorage.getProject(persistedName);
+    if (!project) {
+      // Project was deleted out-of-band; clear stale workspace state.
+      stateManager.setActiveProjectName(undefined);
+      return;
+    }
+    if (activeWatcher) {
+      activeWatcher.dispose();
+    }
+    activeWatcher = new FileWatcher(project.rootPath, () => treeProvider.refresh());
+    activeWatcher.start();
+  };
+  restoreActiveProject();
 
   // Add tree view to subscriptions
   context.subscriptions.push(treeView);
