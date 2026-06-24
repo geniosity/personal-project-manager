@@ -328,13 +328,18 @@ class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode> {
     );
   }
 
-  private findNodeById(node: NodeModel, id: string): NodeModel | undefined {
+  private findNodeById(node: NodeModel, id: string, seen = new Set<string>()): NodeModel | undefined {
+    if (seen.has(node.id)) {
+      return undefined;
+    }
+    seen.add(node.id);
+
     if (node.id === id) {
       return node;
     }
 
     for (const child of node.getChildren()) {
-      const found = this.findNodeById(child, id);
+      const found = this.findNodeById(child, id, seen);
       if (found) {
         return found;
       }
@@ -343,12 +348,17 @@ class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode> {
     return undefined;
   }
 
-  private findParentNode(node: NodeModel, childId: string): NodeModel | undefined {
+  private findParentNode(node: NodeModel, childId: string, seen = new Set<string>()): NodeModel | undefined {
+    if (seen.has(node.id)) {
+      return undefined;
+    }
+    seen.add(node.id);
+
     for (const child of node.getChildren()) {
       if (child.id === childId) {
         return node;
       }
-      const found = this.findParentNode(child, childId);
+      const found = this.findParentNode(child, childId, seen);
       if (found) {
         return found;
       }
