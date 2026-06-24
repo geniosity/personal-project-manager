@@ -270,11 +270,8 @@ class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode> {
     }
 
     if (element.contextValue === 'project') {
-      console.log('[PPM] Getting children for project:', element.label);
       const activeProjectName = this.stateManager.getActiveProjectName();
-      console.log('[PPM] Active project:', activeProjectName);
       if (element.label !== activeProjectName) {
-        console.log('[PPM] Project not active, returning empty');
         return Promise.resolve([]);
       }
 
@@ -385,7 +382,6 @@ export function activate(context: vscode.ExtensionContext) {
   let activeWatcher: FileWatcher | undefined;
 
   const activateProject = (project: IProject) => {
-    console.log('[PPM] Activating project:', project.name);
     stateManager.setActiveProjectName(project.name);
 
     if (activeWatcher) {
@@ -397,7 +393,6 @@ export function activate(context: vscode.ExtensionContext) {
     });
     activeWatcher.start();
     treeProvider.refresh();
-    console.log('[PPM] Project activated:', project.name);
   };
 
   const getProjectByName = (projectName: string): IProject | undefined =>
@@ -478,18 +473,13 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Handle project selection (clicking on a project name to activate it)
   treeView.onDidChangeSelection(event => {
-    console.log('[PPM] Tree selection changed, items:', event.selection.length);
     if (event.selection.length > 0) {
       const selected = event.selection[0];
-      console.log('[PPM] Selected item:', selected.label, 'contextValue:', selected.contextValue);
-      
+
       if (selected.contextValue === 'project') {
-        console.log('[PPM] Project selected, attempting to activate:', selected.label);
         const project = getProjectByName(selected.label);
         if (project) {
           activateProject(project);
-        } else {
-          console.log('[PPM] Project not found:', selected.label);
         }
       }
     }
@@ -500,7 +490,6 @@ export function activate(context: vscode.ExtensionContext) {
     {
       id: 'projectviewer.createNewProject',
       handler: async () => {
-        console.log('[PPM] createNewProject command invoked');
         const selection = await vscode.window.showOpenDialog({
           canSelectFiles: false,
           canSelectFolders: true,
@@ -597,7 +586,6 @@ export function activate(context: vscode.ExtensionContext) {
     {
       id: 'projectviewer.renameProject',
       handler: async (node?: ProjectNode) => {
-        console.log('[PPM] renameProject command invoked, node:', node?.label);
         const projectName = node?.label ?? stateManager.getActiveProjectName();
         if (!projectName) {
           vscode.window.showWarningMessage('No project selected to rename.');
@@ -651,7 +639,6 @@ export function activate(context: vscode.ExtensionContext) {
     {
       id: 'projectviewer.deleteProject',
       handler: async (node?: ProjectNode) => {
-        console.log('[PPM] deleteProject command invoked, node:', node?.label);
         const projectName = node?.label ?? stateManager.getActiveProjectName();
         if (!projectName) {
           vscode.window.showWarningMessage('No project selected to delete.');
@@ -752,7 +739,6 @@ export function activate(context: vscode.ExtensionContext) {
     {
       id: 'projectviewer.addExternalFile',
       handler: async (node?: ProjectNode) => {
-        console.log('[PPM] addExternalFile command invoked, node:', node?.label);
         const activeProjectName = stateManager.getActiveProjectName();
         if (!activeProjectName) {
           vscode.window.showWarningMessage('No active project to add external files.');
@@ -829,7 +815,6 @@ export function activate(context: vscode.ExtensionContext) {
     {
       id: 'projectviewer.addExternalFolder',
       handler: async (node?: ProjectNode) => {
-        console.log('[PPM] addExternalFolder command invoked, node:', node?.label);
         const activeProjectName = stateManager.getActiveProjectName();
         if (!activeProjectName) {
           vscode.window.showWarningMessage('No active project to add external folders.');
