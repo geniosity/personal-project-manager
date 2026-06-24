@@ -311,11 +311,19 @@ function createLinkNode(
     return new BrokenLinkModel(link);
   }
 
-  if (fs.statSync(link.path).isDirectory()) {
-    return new ManualDirModel(link, projectRootPath, linksStorage);
+  // The path existed when getLinks() ran, but it may have been deleted since.
+  // Degrade to a broken node instead of throwing, which would abort the parent's
+  // getChildren() loop and silently drop sibling links iterated after this one.
+  let isDirectory = false;
+  try {
+    isDirectory = fs.statSync(link.path).isDirectory();
+  } catch {
+    return new BrokenLinkModel(link);
   }
 
-  return new ManualFileModel(link);
+  return isDirectory
+    ? new ManualDirModel(link, projectRootPath, linksStorage)
+    : new ManualFileModel(link);
 }
 
 /**
