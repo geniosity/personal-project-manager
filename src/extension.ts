@@ -1199,6 +1199,21 @@ export function activate(context: vscode.ExtensionContext) {
             vscode.Uri.file(oldPath),
             vscode.Uri.file(newPath)
           );
+
+          // A renamed physical directory changes its node id (physicalDir:<path>), which
+          // would orphan any external links nested under it. Re-point them.
+          if (node.contextValue === 'physicalDir') {
+            const activeProjectName = stateManager.getActiveProjectName();
+            const project = activeProjectName ? getProjectByName(activeProjectName) : undefined;
+            if (project) {
+              linksStorage.reparentLinks(
+                project.rootPath,
+                `physicalDir:${oldPath}`,
+                `physicalDir:${newPath}`
+              );
+            }
+          }
+
           treeProvider.refresh();
           vscode.window.showInformationMessage(`Renamed to: ${newName.trim()}`);
         } catch (error) {

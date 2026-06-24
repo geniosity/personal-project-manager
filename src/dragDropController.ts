@@ -197,6 +197,21 @@ export class TreeDragDropController implements vscode.TreeDragAndDropController<
       vscode.Uri.file(sourcePath),
       vscode.Uri.file(destinationPath)
     );
+
+    // Moving a physical dir changes its node id; re-point nested external links.
+    if (dragged.contextValue === 'physicalDir') {
+      const projectRoot = this.getActiveProjectRoot();
+      if (projectRoot) {
+        this.linksStorage.reparentLinks(
+          projectRoot,
+          `physicalDir:${sourcePath}`,
+          `physicalDir:${destinationPath}`
+        );
+      }
+    }
+
+    // Don't rely on the file watcher's debounce race to repaint — refresh explicitly.
+    this.refreshTree();
   }
 
   private async pathExists(fsPath: string): Promise<boolean> {

@@ -135,7 +135,7 @@ suite('Storage Layer Tests', () => {
     test('should use atomic writes', () => {
       const linkPath = fs.mkdtempSync(path.join(tempDir, 'external-'));
       const linkId = linksStorage.addLink(projectDir, 'TestLink', linkPath);
-      
+
       // Add another link (triggers write)
       const linkPath2 = fs.mkdtempSync(path.join(tempDir, 'external2-'));
       linksStorage.addLink(projectDir, 'TestLink2', linkPath2);
@@ -143,6 +143,25 @@ suite('Storage Layer Tests', () => {
       // Verify no temp files left
       const files = fs.readdirSync(projectDir);
       assert.ok(!files.some(f => f.endsWith('.tmp')));
+    });
+
+    test('reparentLinks repoints child links from an old dir id to a new dir id', () => {
+      const childTarget = fs.mkdtempSync(path.join(tempDir, 'child-'));
+      const oldDir = path.join(projectDir, 'oldName');
+      const newDir = path.join(projectDir, 'newName');
+      fs.mkdirSync(oldDir);
+      const oldParentId = `physicalDir:${oldDir}`;
+      const newParentId = `physicalDir:${newDir}`;
+
+      const linkId = linksStorage.addLink(projectDir, 'child', childTarget, undefined, oldParentId);
+      assert.strictEqual(linksStorage.getLinks(projectDir)[linkId].parentId, oldParentId);
+
+      // Simulate the folder rename, then reparent.
+      fs.renameSync(oldDir, newDir);
+      const updated = linksStorage.reparentLinks(projectDir, oldParentId, newParentId);
+
+      assert.strictEqual(updated, 1);
+      assert.strictEqual(linksStorage.getLinks(projectDir)[linkId].parentId, newParentId);
     });
   });
 });

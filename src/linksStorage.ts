@@ -174,6 +174,31 @@ export class LinksStorage {
   }
 
   /**
+   * Re-point every link whose parentId equals oldParentId to newParentId.
+   * Called when a physical directory (whose node id encodes its path) is renamed
+   * or moved, so nested external links don't become orphaned and vanish from the tree.
+   * @returns the number of links updated
+   */
+  reparentLinks(
+    projectRootPath: string,
+    oldParentId: string,
+    newParentId: string | undefined
+  ): number {
+    const links = this.getLinks(projectRootPath);
+    let updated = 0;
+    for (const link of Object.values(links)) {
+      if (link.parentId === oldParentId) {
+        link.parentId = newParentId;
+        updated++;
+      }
+    }
+    if (updated > 0) {
+      this.writeLinks(projectRootPath, Object.values(links));
+    }
+    return updated;
+  }
+
+  /**
    * Get all broken/missing links.
    * @param projectRootPath Path to the project root directory
    * @returns Array of broken links
