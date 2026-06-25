@@ -41,7 +41,6 @@ export class LinksStorage {
    * @returns Object mapping link IDs to link data, or empty object if no links
    */
   getLinks(projectRootPath: string): Record<string, ILink> {
-    // console.log(`PPM: getLinks called for project path: ${projectRootPath}`);
     try {
       const configPath = path.join(projectRootPath, this.configFileName);
       if (!fs.existsSync(configPath)) {

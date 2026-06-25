@@ -4,7 +4,7 @@ All notable changes to the "personal-project-manager" extension will be document
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
-## [0.6.0]
+## [0.6.0] - 2026-06-25
 
 ### Added
 
