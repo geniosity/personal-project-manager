@@ -299,26 +299,6 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode>
     return node;
   }
 
-  private findNodeById(node: NodeModel, id: string, seen = new Set<string>()): NodeModel | undefined {
-    if (seen.has(node.id)) {
-      return undefined;
-    }
-    seen.add(node.id);
-
-    if (node.id === id) {
-      return node;
-    }
-
-    for (const child of node.getChildren()) {
-      const found = this.findNodeById(child, id, seen);
-      if (found) {
-        return found;
-      }
-    }
-
-    return undefined;
-  }
-
   private findParentNode(node: NodeModel, childId: string, seen = new Set<string>()): NodeModel | undefined {
     if (seen.has(node.id)) {
       return undefined;

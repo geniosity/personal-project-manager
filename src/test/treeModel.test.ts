@@ -145,4 +145,28 @@ suite('TreeModel Tests', () => {
     const labels = model!.getChildren().map(c => c.label);
     assert.ok(labels.includes('nested'), 'nested manual link is present');
   });
+
+  test('nodeForElement returns a manualDir model for a valid linkId', () => {
+    const externalDir = fs.mkdtempSync(path.join(tempDir, 'manualDir-'));
+    const linkId = linksStorage.addLink(projectDir, 'myExternal', externalDir);
+
+    const model = treeModel.nodeForElement(
+      { contextValue: 'manualDir', itemPath: externalDir, linkId },
+      projectDir
+    );
+
+    assert.ok(model, 'expected a model for existing manualDir link');
+    assert.strictEqual(model!.contextValue, 'manualDir');
+    assert.strictEqual(model!.itemPath, externalDir);
+    assert.strictEqual(model!.label, 'myExternal');
+  });
+
+  test('nodeForElement returns undefined for a manualDir with a missing linkId', () => {
+    const model = treeModel.nodeForElement(
+      { contextValue: 'manualDir', itemPath: '/does/not/matter', linkId: 'nonexistent-link-id' },
+      projectDir
+    );
+
+    assert.strictEqual(model, undefined);
+  });
 });
