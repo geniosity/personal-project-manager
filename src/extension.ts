@@ -9,9 +9,53 @@ import { FileWatcher } from './watcher';
 import { TreeDragDropController } from './dragDropController';
 
 /**
+ * Summary of an add-external operation.
+ */
+export interface AddExternalSummary {
+  addedCount: number;
+  skippedCount: number;
+  errors: string[];
+}
+
+/**
+ * Add a batch of filesystem paths as external links under a parent node.
+ * Pure helper shared by the add-external command handlers so the add loop is
+ * unit-testable without the open dialog.
+ * @param linksStorage Links storage service
+ * @param projectRootPath Path to the active project's root
+ * @param parentId Parent link/node id, or undefined for the project root
+ * @param paths Filesystem paths to add
+ * @returns Tally of added, skipped (duplicate) and errored paths
+ */
+export function addExternalLinks(
+  linksStorage: LinksStorage,
+  projectRootPath: string,
+  parentId: string | undefined,
+  paths: string[]
+): AddExternalSummary {
+  let addedCount = 0;
+  let skippedCount = 0;
+  const errors: string[] = [];
+  for (const itemPath of paths) {
+    try {
+      linksStorage.addLink(projectRootPath, path.basename(itemPath), itemPath, undefined, parentId);
+      addedCount++;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('already exists')) {
+        skippedCount++;
+      } else {
+        errors.push(message);
+      }
+    }
+  }
+  return { addedCount, skippedCount, errors };
+}
+
+/**
  * Represents a single node in the project tree.
  */
-class ProjectNode extends vscode.TreeItem {
+export class ProjectNode extends vscode.TreeItem {
   /**
    * Creates a new project node.
    * @param label The display label for this node
@@ -381,6 +425,69 @@ export function activate(context: vscode.ExtensionContext) {
     return undefined;
   };
 
+  const addExternal = async (node: ProjectNode | undefined, kind: 'file' | 'folder'): Promise<void> => {
+    const noun = kind === 'file' ? 'file' : 'folder';
+
+    const activeProjectName = stateManager.getActiveProjectName();
+    if (!activeProjectName) {
+      vscode.window.showWarningMessage(`No active project to add external ${noun}s.`);
+      return;
+    }
+
+    const project = getProjectByName(activeProjectName);
+    if (!project) {
+      vscode.window.showErrorMessage(`Project not found: ${activeProjectName}`);
+      return;
+    }
+
+    const selections = await vscode.window.showOpenDialog({
+      canSelectFiles: kind === 'file',
+      canSelectFolders: kind === 'folder',
+      canSelectMany: true,
+      openLabel: kind === 'file' ? 'Add File(s) to Project' : 'Add Folder(s) to Project'
+    });
+
+    if (!selections || selections.length === 0) {
+      return;
+    }
+
+    const parentId = node?.contextValue === 'manualDir'
+      ? node.linkId
+      : node?.contextValue === 'physicalDir'
+        ? node.id
+        : undefined;
+
+    const { addedCount, skippedCount, errors } = addExternalLinks(
+      linksStorage,
+      project.rootPath,
+      parentId,
+      selections.map(selection => selection.fsPath)
+    );
+
+    if (addedCount > 0) {
+      treeProvider.refresh();
+    }
+
+    if (errors.length > 0) {
+      vscode.window.showErrorMessage(`Failed to add ${errors.length} external ${noun}(s): ${errors[0]}`);
+      return;
+    }
+
+    if (addedCount === 0 && skippedCount > 0) {
+      vscode.window.showWarningMessage(`No external ${noun}s added. All selections already exist under this node.`);
+      return;
+    }
+
+    if (skippedCount > 0) {
+      vscode.window.showInformationMessage(
+        `Added ${addedCount} external ${noun}(s). Skipped ${skippedCount} duplicate(s).`
+      );
+      return;
+    }
+
+    vscode.window.showInformationMessage(`Added ${addedCount} external ${noun}(s).`);
+  };
+
   const countEntries = async (uri: vscode.Uri): Promise<number> => {
     const entries = await vscode.workspace.fs.readDirectory(uri);
     let count = entries.length;
@@ -695,155 +802,11 @@ export function activate(context: vscode.ExtensionContext) {
     },
     {
       id: 'projectviewer.addExternalFile',
-      handler: async (node?: ProjectNode) => {
-        const activeProjectName = stateManager.getActiveProjectName();
-        if (!activeProjectName) {
-          vscode.window.showWarningMessage('No active project to add external files.');
-          return;
-        }
-
-        const project = getProjectByName(activeProjectName);
-        if (!project) {
-          vscode.window.showErrorMessage(`Project not found: ${activeProjectName}`);
-          return;
-        }
-
-        const selections = await vscode.window.showOpenDialog({
-          canSelectFiles: true,
-          canSelectFolders: false,
-          canSelectMany: true,
-          openLabel: 'Add File(s) to Project'
-        });
-
-        if (!selections || selections.length === 0) {
-          return;
-        }
-
-        const parentId = node?.contextValue === 'manualDir'
-          ? node.linkId
-          : node?.contextValue === 'physicalDir'
-            ? node.id
-            : undefined;
-
-        let addedCount = 0;
-        let skippedCount = 0;
-        const errors: string[] = [];
-
-        for (const selection of selections) {
-          const itemPath = selection.fsPath;
-          const name = path.basename(itemPath);
-          try {
-            linksStorage.addLink(project.rootPath, name, itemPath, undefined, parentId);
-            addedCount++;
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            if (message.includes('already exists')) {
-              skippedCount++;
-            } else {
-              errors.push(message);
-            }
-          }
-        }
-
-        if (addedCount > 0) {
-          treeProvider.refresh();
-        }
-
-        if (errors.length > 0) {
-          vscode.window.showErrorMessage(`Failed to add ${errors.length} external file(s): ${errors[0]}`);
-          return;
-        }
-
-        if (addedCount === 0 && skippedCount > 0) {
-          vscode.window.showWarningMessage('No external files added. All selections already exist under this node.');
-          return;
-        }
-
-        if (skippedCount > 0) {
-          vscode.window.showInformationMessage(
-            `Added ${addedCount} external file(s). Skipped ${skippedCount} duplicate(s).`
-          );
-          return;
-        }
-
-        vscode.window.showInformationMessage(`Added ${addedCount} external file(s).`);
-      }
+      handler: (node?: ProjectNode) => addExternal(node, 'file')
     },
     {
       id: 'projectviewer.addExternalFolder',
-      handler: async (node?: ProjectNode) => {
-        const activeProjectName = stateManager.getActiveProjectName();
-        if (!activeProjectName) {
-          vscode.window.showWarningMessage('No active project to add external folders.');
-          return;
-        }
-
-        const project = getProjectByName(activeProjectName);
-        if (!project) {
-          vscode.window.showErrorMessage(`Project not found: ${activeProjectName}`);
-          return;
-        }
-
-        const selections = await vscode.window.showOpenDialog({
-          canSelectFiles: false,
-          canSelectFolders: true,
-          canSelectMany: true,
-          openLabel: 'Add Folder(s) to Project'
-        });
-
-        if (!selections || selections.length === 0) {
-          return;
-        }
-
-        const parentId = node?.contextValue === 'manualDir'
-          ? node.linkId
-          : node?.contextValue === 'physicalDir'
-            ? node.id
-            : undefined;
-
-        let addedCount = 0;
-        let skippedCount = 0;
-        const errors: string[] = [];
-
-        for (const selection of selections) {
-          const itemPath = selection.fsPath;
-          const name = path.basename(itemPath);
-          try {
-            linksStorage.addLink(project.rootPath, name, itemPath, undefined, parentId);
-            addedCount++;
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            if (message.includes('already exists')) {
-              skippedCount++;
-            } else {
-              errors.push(message);
-            }
-          }
-        }
-
-        if (addedCount > 0) {
-          treeProvider.refresh();
-        }
-
-        if (errors.length > 0) {
-          vscode.window.showErrorMessage(`Failed to add ${errors.length} external folder(s): ${errors[0]}`);
-          return;
-        }
-
-        if (addedCount === 0 && skippedCount > 0) {
-          vscode.window.showWarningMessage('No external folders added. All selections already exist under this node.');
-          return;
-        }
-
-        if (skippedCount > 0) {
-          vscode.window.showInformationMessage(
-            `Added ${addedCount} external folder(s). Skipped ${skippedCount} duplicate(s).`
-          );
-          return;
-        }
-
-        vscode.window.showInformationMessage(`Added ${addedCount} external folder(s).`);
-      }
+      handler: (node?: ProjectNode) => addExternal(node, 'folder')
     },
     {
       id: 'projectviewer.newFile',

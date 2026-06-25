@@ -16,6 +16,7 @@ suite('TreeDragDropController Tests', () => {
   let stateManager: StateManager;
   let controller: TreeDragDropController;
   let originalWarning: typeof vscode.window.showWarningMessage;
+  let originalInfo: typeof vscode.window.showInformationMessage;
 
   setup(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'projectviewer-dnd-test-'));
@@ -49,10 +50,13 @@ suite('TreeDragDropController Tests', () => {
 
     originalWarning = vscode.window.showWarningMessage;
     vscode.window.showWarningMessage = async () => undefined as unknown as string;
+    originalInfo = vscode.window.showInformationMessage;
+    vscode.window.showInformationMessage = async () => undefined as unknown as string;
   });
 
   teardown(() => {
     vscode.window.showWarningMessage = originalWarning;
+    vscode.window.showInformationMessage = originalInfo;
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -79,5 +83,22 @@ suite('TreeDragDropController Tests', () => {
 
     const links = linksStorage.getLinks(projectDir);
     assert.strictEqual(links[linkId].parentId, `physicalDir:${physicalDirPath}`);
+  });
+
+  test('addExternalUris adds a dropped file:// uri as a link', async () => {
+    const externalFile = path.join(tempDir, 'dropped.txt');
+    fs.writeFileSync(externalFile, 'content');
+
+    await (controller as any).addExternalUris(
+      [vscode.Uri.file(externalFile).toString()],
+      { contextValue: 'project', itemPath: projectDir }
+    );
+
+    const links = linksStorage.getLinks(projectDir);
+    const added = Object.values(links).find(
+      link => path.resolve(link.path).toLowerCase() === path.resolve(externalFile).toLowerCase()
+    );
+    assert.ok(added, 'dropped file should be added as a link');
+    assert.strictEqual(added!.name, 'dropped.txt');
   });
 });

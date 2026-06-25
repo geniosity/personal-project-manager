@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as vscode from 'vscode';
-import { ProjectTreeProvider } from '../extension';
+import { ProjectTreeProvider, addExternalLinks } from '../extension';
 import { ProjectsStorage } from '../storage';
 import { LinksStorage } from '../linksStorage';
 import { StateManager } from '../stateManager';
@@ -51,5 +51,50 @@ suite('ProjectTreeProvider root layout', () => {
     const active = roots.find(r => r.contextValue === 'project');
     assert.strictEqual(active!.label, 'Alpha');
     assert.strictEqual(active!.command?.command, 'projectviewer.activateProject');
+  });
+});
+
+suite('addExternalLinks', () => {
+  let tempDir: string;
+  let projectDir: string;
+  let linksStorage: LinksStorage;
+  let externalA: string;
+  let externalB: string;
+
+  setup(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ppm-addexternal-'));
+    projectDir = fs.mkdtempSync(path.join(tempDir, 'project-'));
+    externalA = path.join(tempDir, 'externalA.txt');
+    externalB = path.join(tempDir, 'externalB.txt');
+    fs.writeFileSync(externalA, 'a');
+    fs.writeFileSync(externalB, 'b');
+    linksStorage = new LinksStorage();
+  });
+
+  teardown(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  test('adds two valid new paths', () => {
+    const summary = addExternalLinks(linksStorage, projectDir, undefined, [externalA, externalB]);
+    assert.strictEqual(summary.addedCount, 2);
+    assert.strictEqual(summary.skippedCount, 0);
+    assert.strictEqual(summary.errors.length, 0);
+  });
+
+  test('skips duplicates on re-add', () => {
+    addExternalLinks(linksStorage, projectDir, undefined, [externalA, externalB]);
+    const summary = addExternalLinks(linksStorage, projectDir, undefined, [externalA, externalB]);
+    assert.strictEqual(summary.addedCount, 0);
+    assert.strictEqual(summary.skippedCount, 2);
+    assert.strictEqual(summary.errors.length, 0);
+  });
+
+  test('records an error for a non-existent path', () => {
+    const missing = path.join(tempDir, 'does-not-exist.txt');
+    const summary = addExternalLinks(linksStorage, projectDir, undefined, [missing]);
+    assert.strictEqual(summary.addedCount, 0);
+    assert.strictEqual(summary.skippedCount, 0);
+    assert.strictEqual(summary.errors.length, 1);
   });
 });
