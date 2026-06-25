@@ -60,6 +60,11 @@
           "type": "boolean",
           "default": false,
           "description": "Enable debug logging for Reveal Active File timing."
+        },
+        "projectviewer.autoRevealActiveFile": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically reveal the active editor's file in the Projects tree when the active editor changes."
         }
       }
     },

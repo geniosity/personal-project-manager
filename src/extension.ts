@@ -536,6 +536,23 @@ export function activate(context: vscode.ExtensionContext) {
     )
   });
 
+  const revealActiveFileInTree = async (silent: boolean): Promise<void> => {
+    const startTime = Date.now();
+    const activeEditor = vscode.window.activeTextEditor;
+    if (!activeEditor) { if (!silent) { vscode.window.showInformationMessage('No active editor to reveal.'); } return; }
+    const activeProjectName = stateManager.getActiveProjectName();
+    if (!activeProjectName) { if (!silent) { vscode.window.showWarningMessage('No active project to reveal against.'); } return; }
+    const project = getProjectByName(activeProjectName);
+    if (!project) { if (!silent) { vscode.window.showErrorMessage(`Project not found: ${activeProjectName}`); } return; }
+    const targetPath = activeEditor.document.uri.fsPath;
+    logRevealActiveFile(`Start; targetPath=${targetPath}`);
+    const leaf = new ProjectNode(path.basename(targetPath), vscode.TreeItemCollapsibleState.None, 'physicalFile', `physicalFile:${targetPath}`, targetPath);
+    const parent = treeProvider.getParent(leaf);
+    if (!parent) { if (!silent) { vscode.window.showInformationMessage('Active file is not part of the project tree.'); } return; }
+    await treeView.reveal(leaf, { select: true, focus: false, expand: true });
+    logRevealActiveFile(`Reveal completed; total=${Date.now() - startTime}ms`);
+  };
+
   // Activate a project explicitly via command (bound to each project row's click
   // command). Selection no longer triggers activation, so right-clicking an
   // inactive project to use a context action does not silently switch the active
@@ -1009,52 +1026,35 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showInformationMessage('Reveal Active File is disabled in settings.');
         return;
       }
-
-      const startTime = Date.now();
-      const activeEditor = vscode.window.activeTextEditor;
-      if (!activeEditor) {
-        vscode.window.showInformationMessage('No active editor to reveal.');
-        return;
-      }
-
-      const activeProjectName = stateManager.getActiveProjectName();
-      if (!activeProjectName) {
-        vscode.window.showWarningMessage('No active project to reveal against.');
-        return;
-      }
-
-      const project = getProjectByName(activeProjectName);
-      if (!project) {
-        vscode.window.showErrorMessage(`Project not found: ${activeProjectName}`);
-        return;
-      }
-
-      const targetPath = activeEditor.document.uri.fsPath;
-      logRevealActiveFile(`Start; targetPath=${targetPath}`);
-
-      // Build the leaf node for the active file directly from its path. The id is
-      // encoded as physicalFile:<absolutePath> so getParent()/findParentNode() can
-      // locate it in the project model without a tree-wide search.
-      const leaf = new ProjectNode(
-        path.basename(targetPath),
-        vscode.TreeItemCollapsibleState.None,
-        'physicalFile',
-        `physicalFile:${targetPath}`,
-        targetPath
-      );
-
-      // Membership check: if the file resolves to no parent it is outside the
-      // project tree. getParent() drives ancestor expansion during reveal.
-      const parent = treeProvider.getParent(leaf);
-      if (!parent) {
-        vscode.window.showInformationMessage('Active file is not part of the project tree.');
-        return;
-      }
-
-      await treeView.reveal(leaf, { select: true, focus: false, expand: true });
-      logRevealActiveFile(`Reveal completed; total=${Date.now() - startTime}ms`);
+      await revealActiveFileInTree(false);
     })
   );
+
+  // Auto-reveal: subscribe to editor changes when the setting is on, tear down when off.
+  let autoRevealSubscription: vscode.Disposable | undefined;
+  const isAutoRevealEnabled = (): boolean =>
+    vscode.workspace.getConfiguration('projectviewer').get<boolean>('autoRevealActiveFile', false);
+  const updateAutoReveal = (): void => {
+    if (isAutoRevealEnabled() && !autoRevealSubscription) {
+      autoRevealSubscription = vscode.window.onDidChangeActiveTextEditor(() => {
+        void revealActiveFileInTree(true);
+      });
+    } else if (!isAutoRevealEnabled() && autoRevealSubscription) {
+      autoRevealSubscription.dispose();
+      autoRevealSubscription = undefined;
+    }
+  };
+  updateAutoReveal();
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('projectviewer.autoRevealActiveFile')) {
+        updateAutoReveal();
+      }
+    })
+  );
+  context.subscriptions.push({
+    dispose: () => { if (autoRevealSubscription) { autoRevealSubscription.dispose(); autoRevealSubscription = undefined; } }
+  });
 
   // Register rename command
   context.subscriptions.push(
