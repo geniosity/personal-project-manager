@@ -364,4 +364,25 @@ export class TreeModel {
   getBrokenLinkCount(projectModel: ProjectModel): number {
     return projectModel.getBrokenLinkCount();
   }
+
+  /**
+   * Build the NodeModel for an already-known tree element directly from its
+   * path/link id, instead of rebuilding the whole project model and DFS-searching
+   * it for the element on every expansion.
+   */
+  nodeForElement(
+    descriptor: { contextValue: string; itemPath: string; linkId?: string },
+    projectRootPath: string
+  ): NodeModel | undefined {
+    if (descriptor.contextValue === 'physicalDir') {
+      return new PhysicalDirModel(descriptor.itemPath, projectRootPath, this.linksStorage);
+    }
+    if (descriptor.contextValue === 'manualDir' && descriptor.linkId) {
+      const link = this.linksStorage.getLinks(projectRootPath)[descriptor.linkId];
+      if (link) {
+        return createLinkNode(link, projectRootPath, this.linksStorage);
+      }
+    }
+    return undefined;
+  }
 }

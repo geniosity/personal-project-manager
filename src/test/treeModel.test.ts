@@ -14,8 +14,8 @@ suite('TreeModel Tests', () => {
   setup(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'projectviewer-tree-test-'));
     projectDir = fs.mkdtempSync(path.join(tempDir, 'project-'));
-    treeModel = new TreeModel(new LinksStorage());
     linksStorage = new LinksStorage();
+    treeModel = new TreeModel(linksStorage);
 
     // Create test structure
     fs.mkdirSync(path.join(projectDir, 'physicalDir1'));
@@ -128,5 +128,21 @@ suite('TreeModel Tests', () => {
     const model = treeModel.createProjectModel('TestProject', projectDir);
     const children = model.getChildren();
     assert.ok(!children.some(c => c.label === '.project-explorer-links.json'));
+  });
+
+  test('nodeForElement returns a physical dir model whose children include nested links', () => {
+    const externalDir = fs.mkdtempSync(path.join(tempDir, 'external-'));
+    const physicalDirPath = path.join(projectDir, 'physicalDir1');
+    const parentId = `physicalDir:${physicalDirPath}`;
+    linksStorage.addLink(projectDir, 'nested', externalDir, undefined, parentId);
+
+    const model = treeModel.nodeForElement(
+      { contextValue: 'physicalDir', itemPath: physicalDirPath },
+      projectDir
+    );
+
+    assert.ok(model, 'expected a model');
+    const labels = model!.getChildren().map(c => c.label);
+    assert.ok(labels.includes('nested'), 'nested manual link is present');
   });
 });

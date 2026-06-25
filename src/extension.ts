@@ -245,16 +245,15 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode>
       return Promise.resolve([]);
     }
 
-    const projectModel = this.treeModel.createProjectModel(
-      activeProject.name,
+    const model = this.treeModel.nodeForElement(
+      { contextValue: element.contextValue, itemPath: element.itemPath, linkId: element.linkId },
       activeProject.rootPath
     );
-    const targetNode = this.findNodeById(projectModel, element.id);
-    if (!targetNode) {
+    if (!model) {
       return Promise.resolve([]);
     }
 
-    return Promise.resolve(targetNode.getChildren().map(convertNodeToTreeItem));
+    return Promise.resolve(model.getChildren().map(convertNodeToTreeItem));
   }
 
   private getActiveProject(): IProject | undefined {
