@@ -67,6 +67,24 @@ suite('Storage Layer Tests', () => {
       const data = JSON.parse(content);
       assert.strictEqual(data.projects.length, 1);
     });
+
+    test('should succeed when a stale fixed-name .tmp file already exists', () => {
+      // Pre-create the old predictable temp path that legacy code would have used
+      const staleTempPath = path.join(tempDir, 'projects.json.tmp');
+      fs.writeFileSync(staleTempPath, 'stale content');
+
+      // With randomized temp names this must succeed; the stale file is irrelevant
+      assert.doesNotThrow(() => {
+        projectsStorage.addProject('X', tempDir);
+      });
+
+      const projects = projectsStorage.getProjects();
+      assert.ok(projects.some(p => p.name === 'X'), 'project X must be persisted');
+
+      const dataPath = path.join(tempDir, 'projects.json');
+      const saved = JSON.parse(fs.readFileSync(dataPath, 'utf-8'));
+      assert.ok(saved.projects.some((p: { name: string }) => p.name === 'X'));
+    });
   });
 
   suite('LinksStorage', () => {
@@ -143,6 +161,23 @@ suite('Storage Layer Tests', () => {
       // Verify no temp files left
       const files = fs.readdirSync(projectDir);
       assert.ok(!files.some(f => f.endsWith('.tmp')));
+    });
+
+    test('should succeed when a stale fixed-name .tmp file already exists', () => {
+      // Pre-create the old predictable temp path that legacy code would have used
+      const staleTempPath = path.join(projectDir, '.project-explorer-links.json.tmp');
+      fs.writeFileSync(staleTempPath, 'stale content');
+
+      const linkTarget = fs.mkdtempSync(path.join(tempDir, 'link-target-'));
+
+      // With randomized temp names this must succeed; the stale file is irrelevant
+      let linkId: string | undefined;
+      assert.doesNotThrow(() => {
+        linkId = linksStorage.addLink(projectDir, 'NewLink', linkTarget);
+      });
+
+      const links = linksStorage.getLinks(projectDir);
+      assert.ok(linkId !== undefined && links[linkId] !== undefined, 'link must be persisted');
     });
 
     test('getLinks drops UNC and non-absolute paths', () => {

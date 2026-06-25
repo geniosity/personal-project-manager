@@ -1,6 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+let tempWriteCounter = 0;
+
 /**
  * Interface representing a project in storage.
  */
@@ -179,6 +181,7 @@ export class ProjectsStorage {
    * @throws Error if write fails
    */
   private writeProjects(projects: IProject[]): void {
+    let tempPath: string | undefined;
     try {
       // Ensure directory exists
       const dir = path.dirname(this.dataPath);
@@ -192,10 +195,11 @@ export class ProjectsStorage {
       };
 
       const content = JSON.stringify(data, null, 2);
-      const tempPath = `${this.dataPath}.tmp`;
+      tempPath = `${this.dataPath}.${process.pid}.${tempWriteCounter++}.tmp`;
 
-      // Write to temporary file first
-      fs.writeFileSync(tempPath, content, 'utf-8');
+      // Write to temporary file first; 'wx' flag ensures exclusive creation so a
+      // pre-existing file or symlink at the temp path cannot be silently followed.
+      fs.writeFileSync(tempPath, content, { encoding: 'utf-8', flag: 'wx' });
 
       // Atomic rename
       if (fs.existsSync(this.dataPath)) {
@@ -203,9 +207,8 @@ export class ProjectsStorage {
       }
       fs.renameSync(tempPath, this.dataPath);
     } catch (error) {
-      // Clean up temp file if it exists
-      const tempPath = `${this.dataPath}.tmp`;
-      if (fs.existsSync(tempPath)) {
+      // Clean up the randomized temp file if the write failed partway through
+      if (tempPath && fs.existsSync(tempPath)) {
         try {
           fs.unlinkSync(tempPath);
         } catch {
