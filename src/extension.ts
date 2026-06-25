@@ -1069,47 +1069,27 @@ export function activate(context: vscode.ExtensionContext) {
       const targetPath = activeEditor.document.uri.fsPath;
       logRevealActiveFile(`Start; targetPath=${targetPath}`);
 
-      const rootsStart = Date.now();
-      const roots = await treeProvider.getChildren();
-      logRevealActiveFile(`Root nodes fetched in ${Date.now() - rootsStart}ms; count=${roots.length}`);
-      const projectRoot = roots.find(root => root.label === project.name);
-      if (!projectRoot) {
-        vscode.window.showInformationMessage('Project not visible in the tree.');
-        return;
-      }
-
-      let visitedNodes = 0;
-      const findNodeByPath = async (node: ProjectNode): Promise<ProjectNode | undefined> => {
-        visitedNodes += 1;
-        if (node.itemPath === targetPath) {
-          return node;
-        }
-
-        const children = await treeProvider.getChildren(node);
-        for (const child of children) {
-          const match = await findNodeByPath(child);
-          if (match) {
-            return match;
-          }
-        }
-        return undefined;
-      };
-
-      const searchStart = Date.now();
-      const match = await findNodeByPath(projectRoot);
-      logRevealActiveFile(
-        `Search finished in ${Date.now() - searchStart}ms; visited=${visitedNodes}`
+      // Build the leaf node for the active file directly from its path. The id is
+      // encoded as physicalFile:<absolutePath> so getParent()/findParentNode() can
+      // locate it in the project model without a tree-wide search.
+      const leaf = new ProjectNode(
+        path.basename(targetPath),
+        vscode.TreeItemCollapsibleState.None,
+        'physicalFile',
+        `physicalFile:${targetPath}`,
+        targetPath
       );
-      if (!match) {
+
+      // Membership check: if the file resolves to no parent it is outside the
+      // project tree. getParent() drives ancestor expansion during reveal.
+      const parent = treeProvider.getParent(leaf);
+      if (!parent) {
         vscode.window.showInformationMessage('Active file is not part of the project tree.');
         return;
       }
 
-      const revealStart = Date.now();
-      await treeView.reveal(match, { select: true, focus: false, expand: true });
-      logRevealActiveFile(
-        `Reveal completed in ${Date.now() - revealStart}ms; total=${Date.now() - startTime}ms`
-      );
+      await treeView.reveal(leaf, { select: true, focus: false, expand: true });
+      logRevealActiveFile(`Reveal completed; total=${Date.now() - startTime}ms`);
     })
   );
 
