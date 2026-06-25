@@ -6,6 +6,12 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [0.6.0] - 2026-06-25
 
+A correctness, security, and polish release. It hardens how the extension reads
+untrusted project link files, fixes several data-loss bugs (window-reload
+watching, link re-parenting on folder moves, vanished link targets), makes the
+tree faster, refreshes the project-row UI, and adds drag-from-Explorer linking
+and an optional auto-reveal of the active file.
+
 ### Added
 
 - Drag files and folders from the OS file manager or VS Code Explorer onto a project or folder node to add them as links.
